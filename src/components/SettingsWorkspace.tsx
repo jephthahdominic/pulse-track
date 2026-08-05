@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Settings, Key, Copy, Check, Shield, Users, CreditCard, Plus, RefreshCw,
   Globe, Pencil, Pause, Play, Trash2, X, Loader2, ChevronRight,
-  Code2, AlertTriangle, MailPlus, CheckCircle2,
+  Code2, AlertTriangle, MailPlus, CheckCircle2, Sparkles, HeartPulse,
 } from 'lucide-react';
 import { Workspace, Project, ApiKey } from '../types';
 
@@ -14,7 +14,7 @@ interface SettingsWorkspaceProps {
   authToken: string | null;
   isMongoMode: boolean;
   onCreateProject: (name: string, domain: string) => Promise<Project>;
-  onUpdateProject: (id: string, updates: { name?: string; domain?: string; status?: string }) => Promise<void>;
+  onUpdateProject: (id: string, updates: { name?: string; domain?: string; status?: string; aiInsightsEnabled?: boolean; healthInsightsEnabled?: boolean }) => Promise<void>;
   onArchiveProject: (id: string) => Promise<void>;
   onRegenerateKeys: (projectId: string) => Promise<{ publicKey: string; secretKey: string }>;
   onRenameWorkspace: (name: string) => Promise<void>;
@@ -53,6 +53,21 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
 
   // Archive confirm
   const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
+
+  // Feature toggles (AI Insights / Health Insights)
+  const [featureLoadingId, setFeatureLoadingId] = useState<string | null>(null);
+
+  const toggleFeature = async (p: Project, key: 'aiInsightsEnabled' | 'healthInsightsEnabled') => {
+    if (featureLoadingId) return;
+    setFeatureLoadingId(p.id);
+    try {
+      await onUpdateProject(p.id, { [key]: !p[key] });
+    } catch (err) {
+      console.error('Failed to toggle feature:', err);
+    } finally {
+      setFeatureLoadingId(null);
+    }
+  };
 
   // Regenerate keys
   const [regenConfirmId, setRegenConfirmId] = useState<string | null>(null);
@@ -277,6 +292,55 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
                       </>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* AI & Insights feature toggles */}
+              {p.status !== 'archived' && (
+                <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    onClick={() => toggleFeature(p, 'aiInsightsEnabled')}
+                    disabled={featureLoadingId === p.id}
+                    title={p.aiInsightsEnabled ? 'Disable AI Insights for this project' : 'Enable AI Insights for this project'}
+                    className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-left transition-colors hover:border-indigo-300 dark:hover:border-indigo-700 cursor-pointer disabled:opacity-60"
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <Sparkles className={`w-3.5 h-3.5 shrink-0 ${p.aiInsightsEnabled ? 'text-indigo-500' : 'text-slate-400'}`} />
+                      <span className="min-w-0">
+                        <span className="block text-xs font-semibold text-slate-700 dark:text-slate-200">AI Insights</span>
+                        <span className="block text-[10px] text-slate-400">Gemini diagnostics &amp; smart analysis</span>
+                      </span>
+                    </span>
+                    {featureLoadingId === p.id ? (
+                      <Loader2 className="w-4 h-4 text-indigo-500 animate-spin shrink-0" />
+                    ) : (
+                      <span className={`relative inline-flex items-center h-5 w-9 rounded-full transition-colors shrink-0 ${p.aiInsightsEnabled ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                        <span className={`inline-block w-3.5 h-3.5 transform rounded-full bg-white transition-transform ${p.aiInsightsEnabled ? 'translate-x-[18px]' : 'translate-x-1'}`} />
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => toggleFeature(p, 'healthInsightsEnabled')}
+                    disabled={featureLoadingId === p.id}
+                    title={p.healthInsightsEnabled ? 'Disable Health Insights for this project' : 'Enable Health Insights for this project'}
+                    className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-left transition-colors hover:border-indigo-300 dark:hover:border-indigo-700 cursor-pointer disabled:opacity-60"
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <HeartPulse className={`w-3.5 h-3.5 shrink-0 ${p.healthInsightsEnabled ? 'text-emerald-500' : 'text-slate-400'}`} />
+                      <span className="min-w-0">
+                        <span className="block text-xs font-semibold text-slate-700 dark:text-slate-200">Health Insights</span>
+                        <span className="block text-[10px] text-slate-400">Core Web Vitals health score</span>
+                      </span>
+                    </span>
+                    {featureLoadingId === p.id ? (
+                      <Loader2 className="w-4 h-4 text-emerald-500 animate-spin shrink-0" />
+                    ) : (
+                      <span className={`relative inline-flex items-center h-5 w-9 rounded-full transition-colors shrink-0 ${p.healthInsightsEnabled ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                        <span className={`inline-block w-3.5 h-3.5 transform rounded-full bg-white transition-transform ${p.healthInsightsEnabled ? 'translate-x-[18px]' : 'translate-x-1'}`} />
+                      </span>
+                    )}
+                  </button>
                 </div>
               )}
 

@@ -30,6 +30,8 @@ export interface Project {
   activeVisitors: number;
   totalEvents24h: number;
   status: 'active' | 'paused' | 'archived';
+  aiInsightsEnabled: boolean;
+  healthInsightsEnabled: boolean;
   createdAt: string;
 }
 

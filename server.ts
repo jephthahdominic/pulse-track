@@ -283,7 +283,7 @@ async function buildAuthPayload(userId: string, workspaceId: string) {
   return {
     user: { id: (user as any)._id.toString(), name: (user as any).name, email: (user as any).email },
     workspace: { id: (workspace as any)._id.toString(), name: (workspace as any).name, slug: (workspace as any).slug, plan: (workspace as any).plan, eventQuota: (workspace as any).eventQuota, eventsUsed: (workspace as any).eventsUsed, members: (workspace as any).members || [] },
-    projects: (projects as any[]).map((p) => ({ id: p._id.toString(), name: p.name, domain: p.domain, publicKey: p.publicKey, secretKey: p.secretKey, status: p.status, activeVisitors: 0, totalEvents24h: 0, workspaceId: p.workspaceId.toString(), createdAt: p.createdAt })),
+    projects: (projects as any[]).map((p) => ({ id: p._id.toString(), name: p.name, domain: p.domain, publicKey: p.publicKey, secretKey: p.secretKey, status: p.status, aiInsightsEnabled: (p as any).aiInsightsEnabled !== false, healthInsightsEnabled: (p as any).healthInsightsEnabled !== false, activeVisitors: 0, totalEvents24h: 0, workspaceId: p.workspaceId.toString(), createdAt: p.createdAt })),
     apiKeys: (apiKeys as any[]).map((k) => ({ id: k._id.toString(), projectId: k.projectId.toString(), name: k.name, key: k.key, type: k.type, lastUsedAt: k.lastUsedAt, createdAt: k.createdAt })),
   };
 }
@@ -634,7 +634,7 @@ async function startServer() {
       const decoded = extractJWT(req); if (!decoded) { res.status(401).json({ error: 'Authentication required.' }); return; }
       try {
         const projects = await ProjectModel.find({ workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId) }).lean();
-        res.json({ projects: (projects as any[]).map((p) => ({ id: p._id.toString(), name: p.name, domain: p.domain, publicKey: p.publicKey, secretKey: p.secretKey, status: p.status, workspaceId: p.workspaceId.toString(), activeVisitors: 0, totalEvents24h: 0, createdAt: p.createdAt })) });
+        res.json({ projects: (projects as any[]).map((p) => ({ id: p._id.toString(), name: p.name, domain: p.domain, publicKey: p.publicKey, secretKey: p.secretKey, status: p.status, aiInsightsEnabled: (p as any).aiInsightsEnabled !== false, healthInsightsEnabled: (p as any).healthInsightsEnabled !== false, workspaceId: p.workspaceId.toString(), activeVisitors: 0, totalEvents24h: 0, createdAt: p.createdAt })) });
       } catch { res.status(500).json({ error: 'Failed to fetch projects.' }); }
     } else {
       res.json({ projects: db.projects.filter((p) => p.workspaceId === ((req.query.workspaceId as string) || db.workspaces[0].id)) });
@@ -651,7 +651,7 @@ async function startServer() {
       const project = new ProjectModel({ workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId), name: name.trim(), domain: domain.trim().replace(/^https?:\/\//, ''), publicKey, secretKey, status: 'active' });
       await project.save();
       await ApiKeyModel.insertMany([{ projectId: project._id, workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId), name: 'Public Client Key', key: publicKey, type: 'public' }, { projectId: project._id, workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId), name: 'Server Secret Key', key: secretKey, type: 'secret' }]);
-      res.status(201).json({ id: project._id.toString(), name: project.name, domain: project.domain, publicKey, secretKey, status: project.status, workspaceId: decoded.workspaceId, activeVisitors: 0, totalEvents24h: 0, createdAt: project.createdAt });
+      res.status(201).json({ id: project._id.toString(), name: project.name, domain: project.domain, publicKey, secretKey, status: project.status, aiInsightsEnabled: (project as any).aiInsightsEnabled !== false, healthInsightsEnabled: (project as any).healthInsightsEnabled !== false, workspaceId: decoded.workspaceId, activeVisitors: 0, totalEvents24h: 0, createdAt: project.createdAt });
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
@@ -663,12 +663,14 @@ async function startServer() {
     try {
       const project = await ProjectModel.findOne({ _id: new mongoose.Types.ObjectId(req.params.id), workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId) });
       if (!project) { res.status(404).json({ error: 'Project not found.' }); return; }
-      const { name, domain, status } = req.body;
+      const { name, domain, status, aiInsightsEnabled, healthInsightsEnabled } = req.body;
       if (name) project.name = name.trim();
       if (domain) project.domain = domain.trim().replace(/^https?:\/\//, '');
       if (status && ['active', 'paused', 'archived'].includes(status)) (project as any).status = status;
+      if (typeof aiInsightsEnabled === 'boolean') (project as any).aiInsightsEnabled = aiInsightsEnabled;
+      if (typeof healthInsightsEnabled === 'boolean') (project as any).healthInsightsEnabled = healthInsightsEnabled;
       await project.save();
-      res.json({ id: project._id.toString(), name: project.name, domain: project.domain, status: project.status, publicKey: project.publicKey, secretKey: project.secretKey, workspaceId: project.workspaceId.toString(), activeVisitors: 0, totalEvents24h: 0, createdAt: project.createdAt });
+      res.json({ id: project._id.toString(), name: project.name, domain: project.domain, status: project.status, publicKey: project.publicKey, secretKey: project.secretKey, aiInsightsEnabled: (project as any).aiInsightsEnabled !== false, healthInsightsEnabled: (project as any).healthInsightsEnabled !== false, workspaceId: project.workspaceId.toString(), activeVisitors: 0, totalEvents24h: 0, createdAt: project.createdAt });
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
@@ -780,6 +782,21 @@ async function startServer() {
       const { projectId, timeframe, customQuestion } = req.body;
       const targetProjectId = projectId || db.projects[0].id;
       const selectedTimeframe = timeframe || '7d';
+
+      // ── 0. Feature toggle check (AI Insights disabled for this project) ────
+      if (isMongoConnected() && mongoose.Types.ObjectId.isValid(targetProjectId)) {
+        const projectDoc = await ProjectModel.findById(new mongoose.Types.ObjectId(targetProjectId)).lean().catch(() => null);
+        if (projectDoc && (projectDoc as any).aiInsightsEnabled === false) {
+          res.json({ success: true, enabled: false, reason: 'ai_insights_disabled' });
+          return;
+        }
+      } else {
+        const demoProject = db.projects.find((p) => p.id === targetProjectId);
+        if (demoProject && demoProject.aiInsightsEnabled === false) {
+          res.json({ success: true, enabled: false, reason: 'ai_insights_disabled' });
+          return;
+        }
+      }
 
       // ── 1. Rate limit check ─────────────────────────────────────────────────
       const { allowed, retryAfterMs } = checkRateLimit(targetProjectId);

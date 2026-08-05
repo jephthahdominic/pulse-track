@@ -67,6 +67,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
     activeVisitors: 0,
     totalEvents24h: 0,
     status: 'active' as const,
+    aiInsightsEnabled: true,
+    healthInsightsEnabled: true,
     createdAt: new Date().toISOString(),
   },
 }) => {
@@ -536,29 +538,31 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
 
       {/* Quick Monitoring Diagnostics Health Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div
-          onClick={() => onNavigateTab('performance')}
-          className="p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/20 shadow-sm hover:border-blue-500/50 cursor-pointer transition-all flex items-center justify-between"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold">
-              <Zap className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-slate-900 dark:text-zinc-100">
-                Core Web Vitals: {stats.webVitalsScore}/100 (Good)
+        {currentProject.healthInsightsEnabled && (
+          <div
+            onClick={() => onNavigateTab('performance')}
+            className="p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/20 shadow-sm hover:border-blue-500/50 cursor-pointer transition-all flex items-center justify-between"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold">
+                <Zap className="w-4 h-4" />
               </div>
-              <div className="text-[10px] text-slate-500 dark:text-zinc-400">
-                LCP 1.2s • CLS 0.02 • INP 85ms
+              <div>
+                <div className="text-xs font-bold text-slate-900 dark:text-zinc-100">
+                  Core Web Vitals: {stats.webVitalsScore}/100 (Good)
+                </div>
+                <div className="text-[10px] text-slate-500 dark:text-zinc-400">
+                  LCP 1.2s • CLS 0.02 • INP 85ms
+                </div>
               </div>
             </div>
+            <ChevronRight className="w-4 h-4 text-slate-400" />
           </div>
-          <ChevronRight className="w-4 h-4 text-slate-400" />
-        </div>
+        )}
 
         <div
           onClick={() => onNavigateTab('errors')}
-          className="p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/20 shadow-sm hover:border-red-500/50 cursor-pointer transition-all flex items-center justify-between"
+          className={`p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/20 shadow-sm hover:border-red-500/50 cursor-pointer transition-all flex items-center justify-between ${currentProject.healthInsightsEnabled ? '' : 'md:col-span-2'}`}
         >
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 rounded bg-red-500/10 text-red-400 flex items-center justify-center font-bold">

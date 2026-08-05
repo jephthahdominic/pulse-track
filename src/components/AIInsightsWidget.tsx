@@ -14,6 +14,7 @@ import {
   Cpu,
   ArrowRight,
   ListChecks,
+  Lock,
 } from 'lucide-react';
 import { Project, Timeframe } from '../types';
 
@@ -63,6 +64,9 @@ export const AIInsightsWidget: React.FC<AIInsightsWidgetProps> = ({
   const [expandedErrorIndex, setExpandedErrorIndex] = useState<number | null>(0);
   const [rateLimitMsg, setRateLimitMsg] = useState<string | null>(null);
   const [fromCache, setFromCache] = useState(false);
+  const [featureDisabled, setFeatureDisabled] = useState(false);
+
+  const disabled = featureDisabled || !project.aiInsightsEnabled;
 
   const fetchAIInsights = async (question?: string) => {
     if (question) { setAskingQuestion(true); } else { setLoading(true); }
@@ -83,6 +87,10 @@ export const AIInsightsWidget: React.FC<AIInsightsWidgetProps> = ({
 
       if (response.ok) {
         const data = await response.json();
+        if (data.enabled === false) {
+          setFeatureDisabled(true);
+          return;
+        }
         if (data.insights) {
           setInsights(data.insights);
           setModelSource(data.source || '');
@@ -98,8 +106,11 @@ export const AIInsightsWidget: React.FC<AIInsightsWidgetProps> = ({
   };
 
   useEffect(() => {
-    fetchAIInsights();
-  }, [project.id, timeframe]);
+    if (project.aiInsightsEnabled) {
+      setFeatureDisabled(false);
+      fetchAIInsights();
+    }
+  }, [project.id, project.aiInsightsEnabled, timeframe]);
 
   const handleAskSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,7 +145,40 @@ export const AIInsightsWidget: React.FC<AIInsightsWidgetProps> = ({
       {/* Background Decorative Accent */}
       <div className="absolute -top-12 -right-12 w-48 h-48 bg-indigo-500/5 rounded-full blur-2xl pointer-events-none" />
 
+      {/* Disabled / locked state */}
+      {disabled && (
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/50">
+          <div className="flex items-start space-x-3">
+            <div className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center shrink-0">
+              <Lock className="w-4.5 h-4.5" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <h3 className="text-sm font-bold tracking-tight text-slate-900 dark:text-zinc-100">
+                  AI Diagnostics &amp; Health Insights
+                </h3>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20">
+                  Disabled
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5 max-w-lg">
+                AI insights and health diagnostics are turned off for this project. Enable them any time from
+                Settings &amp; Keys to get Gemini-powered analysis of traffic, Core Web Vitals, and error logs.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigateTab && onNavigateTab('settings')}
+            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-sm shrink-0 cursor-pointer"
+          >
+            <ArrowRight className="w-3.5 h-3.5" />
+            <span>Enable in Settings</span>
+          </button>
+        </div>
+      )}
+
       {/* Widget Header */}
+      {!disabled && (<>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/80 dark:border-zinc-800/80">
         <div className="flex items-center space-x-3">
           <div className="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
@@ -414,6 +458,7 @@ export const AIInsightsWidget: React.FC<AIInsightsWidgetProps> = ({
           </form>
         </div>
       )}
+      </>)}
     </div>
   );
 };

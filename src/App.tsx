@@ -156,6 +156,8 @@ export default function App() {
         name: p.name, domain: p.domain, publicKey: p.publicKey, secretKey: p.secretKey,
         status: p.status || 'active', activeVisitors: p.activeVisitors ?? 0,
         totalEvents24h: p.totalEvents24h ?? 0,
+        aiInsightsEnabled: p.aiInsightsEnabled !== false,
+        healthInsightsEnabled: p.healthInsightsEnabled !== false,
         createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date().toISOString(),
       });
       setProjects(data.projects.map(mapProject));
@@ -248,6 +250,8 @@ export default function App() {
     name: p.name, domain: p.domain, publicKey: p.publicKey, secretKey: p.secretKey,
     status: (p.status || 'active') as Project['status'], activeVisitors: p.activeVisitors ?? 0,
     totalEvents24h: p.totalEvents24h ?? 0,
+    aiInsightsEnabled: p.aiInsightsEnabled !== false,
+    healthInsightsEnabled: p.healthInsightsEnabled !== false,
     createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date().toISOString(),
   });
 
@@ -256,7 +260,7 @@ export default function App() {
       // Demo mode — create in-memory
       const pk = `pk_live_demo_${Math.random().toString(36).slice(2, 10)}`;
       const sk = `sk_live_demo_${Math.random().toString(36).slice(2, 10)}`;
-      const proj: Project = { id: `proj_demo_${Date.now()}`, workspaceId: currentWorkspace.id, name, domain, publicKey: pk, secretKey: sk, status: 'active', activeVisitors: 0, totalEvents24h: 0, createdAt: new Date().toISOString() };
+      const proj: Project = { id: `proj_demo_${Date.now()}`, workspaceId: currentWorkspace.id, name, domain, publicKey: pk, secretKey: sk, status: 'active', aiInsightsEnabled: true, healthInsightsEnabled: true, activeVisitors: 0, totalEvents24h: 0, createdAt: new Date().toISOString() };
       setProjects((prev) => [...prev, proj]);
       return proj;
     }
@@ -268,7 +272,7 @@ export default function App() {
     return proj;
   };
 
-  const handleUpdateProject = async (id: string, updates: { name?: string; domain?: string; status?: string }) => {
+  const handleUpdateProject = async (id: string, updates: { name?: string; domain?: string; status?: string; aiInsightsEnabled?: boolean; healthInsightsEnabled?: boolean }) => {
     if (!isAuthRequired) {
       setProjects((prev) => prev.map((p) => p.id === id ? { ...p, ...updates } as Project : p));
       if (currentProject.id === id) setCurrentProject((prev) => ({ ...prev, ...updates } as Project));

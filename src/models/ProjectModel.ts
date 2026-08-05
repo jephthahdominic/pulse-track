@@ -8,6 +8,8 @@ export interface IProject extends Document {
   publicKey: string;
   secretKey: string;
   status: 'active' | 'paused' | 'archived';
+  aiInsightsEnabled: boolean;
+  healthInsightsEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -20,6 +22,8 @@ const ProjectSchema = new Schema<IProject>(
     publicKey: { type: String, required: true, unique: true, index: true },
     secretKey: { type: String, required: true, unique: true, index: true },
     status: { type: String, enum: ['active', 'paused', 'archived'], default: 'active' },
+    aiInsightsEnabled: { type: Boolean, default: true },
+    healthInsightsEnabled: { type: Boolean, default: true },
   },
   { timestamps: true }
 );

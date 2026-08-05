@@ -75,6 +75,8 @@ class AnalyticsDatabase {
       activeVisitors: 42,
       totalEvents24h: 38420,
       status: 'active',
+      aiInsightsEnabled: true,
+      healthInsightsEnabled: true,
       createdAt: new Date(Date.now() - 90 * 86400000).toISOString(),
     };
 
@@ -88,6 +90,8 @@ class AnalyticsDatabase {
       activeVisitors: 12,
       totalEvents24h: 12400,
       status: 'active',
+      aiInsightsEnabled: true,
+      healthInsightsEnabled: true,
       createdAt: new Date(Date.now() - 45 * 86400000).toISOString(),
     };
 
