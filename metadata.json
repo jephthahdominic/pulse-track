@@ -1,0 +1,6 @@
+{
+  "name": "PulseTrack",
+  "description": "Enterprise-grade Website Monitoring, Behavioral Analytics, Core Web Vitals, Error Tracking & Support Desk Platform",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
