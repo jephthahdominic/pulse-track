@@ -458,15 +458,29 @@ async function startServer() {
 
   app.get('/api/v1/analytics/live', async (req: AuthenticatedRequest, res) => {
     try {
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 500);
+      const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
+
       if (isMongoConnected()) {
         const decoded = extractJWT(req); if (!decoded) { res.status(401).json({ error: 'Authentication required.' }); return; }
         const projectId = req.query.projectId as string; if (!projectId) { res.status(400).json({ error: 'projectId is required.' }); return; }
         const fiveMinAgo = new Date(Date.now() - 300000);
-        const liveSessions = await SessionModel.find({ projectId: new mongoose.Types.ObjectId(projectId), lastActiveAt: { $gte: fiveMinAgo } }).sort({ lastActiveAt: -1 }).limit(50).lean();
-        res.json({ activeCount: liveSessions.length, visitors: (liveSessions as any[]).map((s) => ({ sessionId: s.sessionId, userId: s.userId, country: s.geo?.country || 'Unknown', city: s.geo?.city || 'Unknown', browser: s.device?.browser || 'Unknown', device: s.device?.deviceType || 'desktop', activePage: s.exitPage, durationSeconds: s.durationSeconds, startedAt: s.startedAt, referrer: s.userTraits?.referrer || 'Direct' })) });
+        const query = { projectId: new mongoose.Types.ObjectId(projectId), lastActiveAt: { $gte: fiveMinAgo } };
+        const [liveSessions, activeCount] = await Promise.all([
+          SessionModel.find(query).sort({ lastActiveAt: -1 }).skip(offset).limit(limit).lean(),
+          SessionModel.countDocuments(query as any),
+        ]);
+        res.json({
+          activeCount,
+          total: activeCount,
+          limit,
+          offset,
+          visitors: (liveSessions as any[]).map((s) => ({ sessionId: s.sessionId, userId: s.userId, country: s.geo?.country || 'Unknown', city: s.geo?.city || 'Unknown', browser: s.device?.browser || 'Unknown', device: s.device?.deviceType || 'desktop', activePage: s.exitPage, durationSeconds: s.durationSeconds, startedAt: s.startedAt, referrer: s.userTraits?.referrer || 'Direct' })),
+        });
       } else {
-        const live = db.getLiveVisitors((req.query.projectId as string) || db.projects[0].id);
-        res.json({ activeCount: live.length, visitors: live });
+        const projectId = (req.query.projectId as string) || db.projects[0].id;
+        const live = db.getLiveVisitors(projectId, limit, offset);
+        res.json({ activeCount: live.activeCount, total: live.activeCount, limit, offset, visitors: live.visitors });
       }
     } catch (err: any) { res.status(500).json({ error: 'Failed to fetch live visitors.' }); }
   });
@@ -549,6 +563,50 @@ async function startServer() {
         res.json({ entries: feed.slice(offset, offset + limit), total: feed.length, limit, offset });
       }
     } catch (err: any) { res.status(500).json({ error: 'Failed to fetch realtime feed.' }); }
+  });
+
+  app.get('/api/v1/analytics/realtime/clicks', async (req: AuthenticatedRequest, res) => {
+    try {
+      const projectId = (req.query.projectId as string) || db.projects[0].id;
+      const windowMinutes = Math.min(Math.max(parseInt(req.query.window as string) || 30, 5), 120);
+      const now = Date.now();
+      const since = now - windowMinutes * 60000;
+
+      const buckets: Array<{ time: string; clicks: number; pageviews: number }> = [];
+      for (let i = 0; i < windowMinutes; i++) {
+        const t = new Date(now - (windowMinutes - 1 - i) * 60000);
+        buckets.push({ time: t.toLocaleTimeString('en-GB', { hour12: false, minute: '2-digit' }), clicks: 0, pageviews: 0 });
+      }
+      const bucketFor = (ts: number): number => Math.floor((ts - since) / 60000);
+
+      if (isMongoConnected()) {
+        const decoded = extractJWT(req); if (!decoded) { res.status(401).json({ error: 'Authentication required.' }); return; }
+        const pid = new mongoose.Types.ObjectId(projectId);
+        const events = await EventModel.find({
+          projectId: pid,
+          type: { $in: ['click', 'pageview'] as Array<'click' | 'pageview'> },
+          timestamp: { $gte: new Date(since) },
+        }).lean();
+        (events as any[]).forEach((e) => {
+          const idx = bucketFor(new Date(e.timestamp).getTime());
+          if (idx >= 0 && idx < windowMinutes) {
+            if (e.type === 'click') buckets[idx].clicks++;
+            else buckets[idx].pageviews++;
+          }
+        });
+      } else {
+        db.clickEvents.filter((c) => c.projectId === projectId && c.timestamp >= since).forEach((c) => {
+          const idx = bucketFor(c.timestamp);
+          if (idx >= 0 && idx < windowMinutes) buckets[idx].clicks++;
+        });
+        db.pageViews.filter((p) => p.projectId === projectId && p.timestamp >= since).forEach((p) => {
+          const idx = bucketFor(p.timestamp);
+          if (idx >= 0 && idx < windowMinutes) buckets[idx].pageviews++;
+        });
+      }
+
+      res.json({ windowMinutes, buckets });
+    } catch (err: any) { res.status(500).json({ error: 'Failed to fetch click rate.' }); }
   });
 
   app.get('/api/v1/analytics/sessions', async (req: AuthenticatedRequest, res) => {

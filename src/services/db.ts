@@ -326,6 +326,98 @@ class AnalyticsDatabase {
       }
     }
 
+    // 5b. Recent live activity (last 30 min) so Realtime lists/graphs have fresh data
+    {
+      const liveBase = Date.now();
+      const livePaths = ['/', '/products/quantum-headphones', '/pricing', '/checkout', '/docs', '/blog/ai-trends'];
+      const liveGeo = countries[0];
+      const liveSessions = ['sess_live_a', 'sess_live_b', 'sess_live_c', 'sess_live_d', 'sess_live_e'];
+      for (let i = 0; i < 120; i++) {
+        const ts = liveBase - i * 15000;
+        const sId = liveSessions[i % liveSessions.length];
+        const pvPath = livePaths[i % livePaths.length];
+        const isMobile = i % 3 === 0;
+        const device = {
+          browser: browsers[i % browsers.length],
+          os: osList[i % osList.length],
+          deviceType: isMobile ? ('mobile' as const) : ('desktop' as const),
+          screenWidth: isMobile ? 390 : 1920,
+          screenHeight: isMobile ? 844 : 1080,
+          viewportWidth: isMobile ? 390 : 1440,
+          viewportHeight: isMobile ? 700 : 900,
+          userAgent: `Mozilla/5.0 (${osList[i % osList.length]}; ${browsers[i % browsers.length]}/120.0)`,
+          language: 'en-US',
+          timezone: 'America/Los_Angeles',
+        };
+        const geoInfo = {
+          ip: '127.0.0.1',
+          country: liveGeo.country,
+          countryCode: liveGeo.code,
+          city: liveGeo.cities[i % liveGeo.cities.length],
+          region: 'CA',
+        };
+        this.clickEvents.push({
+          id: `click_live_seed_${i}`,
+          sessionId: sId,
+          projectId: p1.id,
+          workspaceId: defaultWorkspace.id,
+          targetTag: 'BUTTON',
+          targetId: 'btn-cta',
+          targetText: 'Add to Cart',
+          x: Math.floor(Math.random() * 800) + 100,
+          y: Math.floor(Math.random() * 600) + 50,
+          isRageClick: i % 25 === 0,
+          isDeadClick: false,
+          url: `https://ecommerce.acme.com${pvPath}`,
+          timestamp: ts,
+        });
+        if (i % 4 === 0) {
+          this.pageViews.push({
+            id: `pv_live_seed_${i}`,
+            sessionId: sId,
+            projectId: p1.id,
+            workspaceId: defaultWorkspace.id,
+            url: `https://ecommerce.acme.com${pvPath}`,
+            path: pvPath,
+            title: 'Live Page',
+            referrer: 'Direct',
+            timestamp: ts,
+            device,
+            geo: geoInfo,
+          });
+        }
+      }
+      liveSessions.forEach((sId, k) => {
+        this.sessions.push({
+          id: `sess_live_obj_${k}`,
+          sessionId: sId,
+          projectId: p1.id,
+          workspaceId: defaultWorkspace.id,
+          startedAt: liveBase - 60000,
+          lastActiveAt: liveBase - k * 7000,
+          durationSeconds: 120,
+          pageViewsCount: 3,
+          eventsCount: 8,
+          entryPage: '/',
+          exitPage: livePaths[k % livePaths.length],
+          isBounce: false,
+          device: {
+            browser: browsers[k],
+            os: osList[k],
+            deviceType: 'desktop' as const,
+            screenWidth: 1920,
+            screenHeight: 1080,
+            viewportWidth: 1440,
+            viewportHeight: 900,
+            userAgent: 'Mozilla/5.0',
+            language: 'en-US',
+            timezone: 'UTC',
+          },
+          geo: { ip: '127.0.0.1', country: liveGeo.country, countryCode: liveGeo.code, city: liveGeo.cities[k % liveGeo.cities.length], region: 'CA' },
+        });
+      });
+    }
+
     // 6. User Profiles
     this.userProfiles.push(
       {
@@ -568,20 +660,31 @@ class AnalyticsDatabase {
     };
   }
 
-  public getLiveVisitors(projectId: string) {
-    const currentActive = this.sessions.slice(-12).map((s, idx) => ({
-      sessionId: s.sessionId,
-      userId: s.userId || `Visitor #${800 + idx}`,
-      country: s.geo.country,
-      city: s.geo.city,
-      browser: s.device.browser,
-      device: s.device.deviceType,
-      activePage: s.exitPage,
-      durationSeconds: Math.floor(Math.random() * 400) + 20,
-      startedAt: Date.now() - (idx * 60000 + 12000),
-      referrer: 'Direct / Search',
-    }));
-    return currentActive;
+  public getLiveVisitors(projectId: string, limit = 50, offset = 0) {
+    const base = this.sessions.filter((s) => s.projectId === projectId);
+    if (base.length === 0) return { activeCount: 0, visitors: [] };
+
+    // Simulated live population — demo mode has no real traffic, so report a
+    // realistic active count and page over generated rows built from seeded sessions.
+    const activeCount = 52430;
+    const visitors = [];
+    for (let i = 0; i < limit; i++) {
+      const absIdx = offset + i;
+      const s = base[absIdx % base.length];
+      visitors.push({
+        sessionId: `sess_live_${absIdx}`,
+        userId: s.userId || `Visitor #${(absIdx % 9000) + 1}`,
+        country: s.geo.country,
+        city: s.geo.city,
+        browser: s.device.browser,
+        device: s.device.deviceType,
+        activePage: s.exitPage,
+        durationSeconds: Math.floor(Math.abs(Math.sin(absIdx + 1)) * 390) + 20,
+        startedAt: Date.now() - ((absIdx % 290) + 10) * 1000,
+        referrer: 'Direct / Search',
+      });
+    }
+    return { activeCount, visitors };
   }
 
   public ingestBatchedEvents(apiKey: string, sessionId: string, events: Array<{ type: string; data: any; timestamp: number }>) {
