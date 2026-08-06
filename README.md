@@ -233,6 +233,7 @@ Auth endpoints return a JWT; analytics endpoints require it as `Authorization: B
 | `POST` | `/api/v1/performance` / `/api/v1/error` / `/api/v1/custom-event` | Single-purpose ingestion endpoints |
 | `GET` | `/api/v1/analytics/overview` | Aggregated stats for the selected project and timeframe |
 | `GET` | `/api/v1/analytics/live` | Currently active sessions |
+| `GET` | `/api/v1/analytics/realtime` | Recent activity feed (paginated `limit`/`offset`) |
 | `GET` | `/api/v1/analytics/sessions` | Session history |
 | `GET` | `/api/v1/analytics/events` | Custom conversion events |
 | `GET` | `/api/v1/analytics/errors` | Captured errors |

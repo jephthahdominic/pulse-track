@@ -90,26 +90,36 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   const [zoomEndIndex, setZoomEndIndex] = React.useState<number | null>(null);
   const [chartStyle, setChartStyle] = React.useState<'area' | 'line'>('area');
   const [realtimeFeed, setRealtimeFeed] = React.useState<RealtimeFeedEntry[]>([]);
+  const [realtimePage, setRealtimePage] = React.useState(1);
+  const [realtimeTotal, setRealtimeTotal] = React.useState(0);
+  const realtimePageSize = 20;
+  const feedListRef = React.useRef<HTMLDivElement>(null);
 
   const fetchRealtimeFeed = React.useCallback(async () => {
     try {
       const params = new URLSearchParams();
       if (currentProject?.id) params.set('projectId', currentProject.id);
+      params.set('limit', String(realtimePageSize));
+      params.set('offset', String((realtimePage - 1) * realtimePageSize));
       const qs = params.toString();
-      const res = await fetch(`/api/v1/analytics/realtime${qs ? `?${qs}` : ''}`, { headers: authHeaders || {} });
+      const res = await fetch(`/api/v1/analytics/realtime?${qs}`, { headers: authHeaders || {} });
       if (!res.ok) return;
       const data = await res.json();
       setRealtimeFeed(data.entries || []);
+      setRealtimeTotal(data.total ?? 0);
+      feedListRef.current?.scrollTo({ top: 0 });
     } catch {
       // Keep the last successfully loaded feed
     }
-  }, [currentProject?.id, authHeaders]);
+  }, [currentProject?.id, authHeaders, realtimePage]);
 
   React.useEffect(() => {
     fetchRealtimeFeed();
     const interval = setInterval(fetchRealtimeFeed, 5000);
     return () => clearInterval(interval);
   }, [fetchRealtimeFeed]);
+
+  const realtimeTotalPages = Math.max(1, Math.ceil(realtimeTotal / realtimePageSize));
 
   const displayedSeries = React.useMemo(() => {
     if (zoomStartIndex !== null && zoomEndIndex !== null) {
@@ -463,7 +473,12 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           </div>
 
-          <div className="flex-1 overflow-y-auto p-3 space-y-1.5 font-mono text-[10px]">
+          <div ref={feedListRef} className="h-80 overflow-y-auto p-3 space-y-1.5 font-mono text-[10px]">
+            {realtimeLogEntries.length === 0 && (
+              <div className="flex items-center justify-center h-full text-slate-400 dark:text-zinc-600">
+                No recent activity yet
+              </div>
+            )}
             {realtimeLogEntries.map((log) => (
               <div key={log.id} className="flex items-center gap-2 text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800/50 p-1 rounded cursor-pointer">
                 <span className="text-blue-500 font-medium">{log.time}</span>
@@ -472,6 +487,33 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                 <span className={log.targetColor}>{log.target}</span>
               </div>
             ))}
+          </div>
+
+          <div className="px-3 py-2 border-t border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/30 flex items-center justify-between gap-2">
+            <span className="text-[10px] text-slate-500 dark:text-zinc-500">
+              {realtimeTotal > 0
+                ? `${(realtimePage - 1) * realtimePageSize + 1}–${Math.min(realtimePage * realtimePageSize, realtimeTotal)} of ${realtimeTotal.toLocaleString()}`
+                : 'No activity'}
+            </span>
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={() => setRealtimePage((p) => Math.max(1, p - 1))}
+                disabled={realtimePage <= 1}
+                className="px-2 py-1 rounded text-[10px] font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Prev
+              </button>
+              <span className="text-[10px] text-slate-500 dark:text-zinc-500 font-mono px-1">
+                {realtimePage} / {realtimeTotalPages}
+              </span>
+              <button
+                onClick={() => setRealtimePage((p) => Math.min(realtimeTotalPages, p + 1))}
+                disabled={realtimePage >= realtimeTotalPages}
+                className="px-2 py-1 rounded text-[10px] font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Next
+              </button>
+            </div>
           </div>
 
           <div className="p-3 border-t border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/30 space-y-1.5">

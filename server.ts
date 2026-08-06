@@ -474,6 +474,8 @@ async function startServer() {
   app.get('/api/v1/analytics/realtime', async (req: AuthenticatedRequest, res) => {
     try {
       const projectId = (req.query.projectId as string) || db.projects[0].id;
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
+      const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
 
       const shortId = (id?: string) => {
         if (!id) return 'Anonymous';
@@ -486,10 +488,14 @@ async function startServer() {
       if (isMongoConnected()) {
         const decoded = extractJWT(req); if (!decoded) { res.status(401).json({ error: 'Authentication required.' }); return; }
         const pid = new mongoose.Types.ObjectId(projectId);
-        const events = await EventModel.find({
+        const query = {
           projectId: pid,
-          type: { $in: ['pageview', 'click', 'custom', 'error', 'identify'] },
-        }).sort({ timestamp: -1 }).limit(60).lean();
+          type: { $in: ['pageview', 'click', 'custom', 'error', 'identify'] as Array<'pageview' | 'click' | 'custom' | 'error' | 'identify'> },
+        };
+        const [events, total] = await Promise.all([
+          EventModel.find(query).sort({ timestamp: -1 }).skip(offset).limit(limit).lean(),
+          EventModel.countDocuments(query as any),
+        ]);
 
         const entries = (events as any[]).map((e) => {
           const ts = new Date(e.timestamp).getTime();
@@ -514,9 +520,8 @@ async function startServer() {
           }
         });
 
-        res.json({ entries });
+        res.json({ entries, total, limit, offset });
       } else {
-        const limit = 60;
         const feed: any[] = [];
 
         db.pageViews.filter((p) => p.projectId === projectId).forEach((p) => {
@@ -541,7 +546,7 @@ async function startServer() {
         });
 
         feed.sort((a, b) => b.timestamp - a.timestamp);
-        res.json({ entries: feed.slice(0, limit) });
+        res.json({ entries: feed.slice(offset, offset + limit), total: feed.length, limit, offset });
       }
     } catch (err: any) { res.status(500).json({ error: 'Failed to fetch realtime feed.' }); }
   });
