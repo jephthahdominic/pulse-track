@@ -383,6 +383,7 @@ export default function App() {
               currentProject={currentProject}
               onNavigateTab={(tab: any) => setActiveTab(tab)}
               onOpenExport={() => setIsExportModalOpen(true)}
+              authHeaders={authHeaders()}
             />
           )}
 

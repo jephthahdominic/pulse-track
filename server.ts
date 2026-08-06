@@ -471,6 +471,81 @@ async function startServer() {
     } catch (err: any) { res.status(500).json({ error: 'Failed to fetch live visitors.' }); }
   });
 
+  app.get('/api/v1/analytics/realtime', async (req: AuthenticatedRequest, res) => {
+    try {
+      const projectId = (req.query.projectId as string) || db.projects[0].id;
+
+      const shortId = (id?: string) => {
+        if (!id) return 'Anonymous';
+        const last = id.split('_').pop();
+        return last && /^\d+$/.test(last) ? `Visitor #${last}` : id;
+      };
+
+      const feedUser = (sessionId: string, userId?: string) => userId || shortId(sessionId);
+
+      if (isMongoConnected()) {
+        const decoded = extractJWT(req); if (!decoded) { res.status(401).json({ error: 'Authentication required.' }); return; }
+        const pid = new mongoose.Types.ObjectId(projectId);
+        const events = await EventModel.find({
+          projectId: pid,
+          type: { $in: ['pageview', 'click', 'custom', 'error', 'identify'] },
+        }).sort({ timestamp: -1 }).limit(60).lean();
+
+        const entries = (events as any[]).map((e) => {
+          const ts = new Date(e.timestamp).getTime();
+          const base = { id: e._id.toString(), timestamp: ts, user: feedUser(e.sessionId, e.userId) };
+          switch (e.type) {
+            case 'pageview':
+              return { ...base, type: 'visit', action: 'visited', target: e.data?.path || e.data?.url || '/' };
+            case 'click':
+              return { ...base, type: 'click', action: 'clicked', target: e.data?.targetText || e.data?.targetId || e.data?.targetTag || 'element' };
+            case 'custom':
+              return {
+                ...base,
+                type: (e.data?.eventName || '').toLowerCase().includes('purchase') ? 'purchase' : 'event',
+                action: (e.data?.eventName || '').toLowerCase().includes('purchase') ? 'completed' : 'triggered',
+                target: e.data?.eventName || 'CustomAction',
+              };
+            case 'error':
+              return { ...base, type: 'error', action: 'exception on', target: (e.data?.message || 'Script error').slice(0, 60) };
+            case 'identify':
+            default:
+              return { ...base, type: 'identify', action: 'identified', target: e.userId || e.data?.userId || e.sessionId };
+          }
+        });
+
+        res.json({ entries });
+      } else {
+        const limit = 60;
+        const feed: any[] = [];
+
+        db.pageViews.filter((p) => p.projectId === projectId).forEach((p) => {
+          feed.push({ id: p.id, type: 'visit', user: feedUser(p.sessionId, p.userId), action: 'visited', target: p.path || p.url, timestamp: p.timestamp });
+        });
+        db.clickEvents.filter((c) => c.projectId === projectId).forEach((c) => {
+          feed.push({ id: c.id, type: 'click', user: feedUser(c.sessionId, c.userId), action: 'clicked', target: c.targetText || c.targetId || c.targetTag || 'element', timestamp: c.timestamp });
+        });
+        db.customEvents.filter((e) => e.projectId === projectId).forEach((e) => {
+          const isPurchase = (e.eventName || '').toLowerCase().includes('purchase');
+          feed.push({
+            id: e.id,
+            type: isPurchase ? 'purchase' : 'event',
+            user: feedUser(e.sessionId, e.userId),
+            action: isPurchase ? 'completed' : 'triggered',
+            target: isPurchase && e.properties?.orderId ? `Order ${e.properties.orderId} ($${e.properties.amount ?? ''})` : e.eventName,
+            timestamp: e.timestamp,
+          });
+        });
+        db.errorLogs.filter((e) => e.projectId === projectId).forEach((e) => {
+          feed.push({ id: e.id, type: 'error', user: shortId(e.sessionId), action: 'exception on', target: (e.message || 'Script error').slice(0, 60), timestamp: e.timestamp });
+        });
+
+        feed.sort((a, b) => b.timestamp - a.timestamp);
+        res.json({ entries: feed.slice(0, limit) });
+      }
+    } catch (err: any) { res.status(500).json({ error: 'Failed to fetch realtime feed.' }); }
+  });
+
   app.get('/api/v1/analytics/sessions', async (req: AuthenticatedRequest, res) => {
     try {
       if (isMongoConnected()) {

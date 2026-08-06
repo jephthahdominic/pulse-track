@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Radio, Globe, Laptop, Smartphone, Eye, Play, Sparkles, RefreshCw, Activity } from 'lucide-react';
 import { Project } from '../types';
+import { db } from '../services/db';
 
 interface LiveVisitorsProps {
   onTriggerSimulatedHit?: () => void;
@@ -27,8 +28,28 @@ interface ActivityFeedItem {
   action: string;
   target: string;
   timestamp: string;
-  type: 'visit' | 'click' | 'form' | 'purchase';
+  type: 'visit' | 'click' | 'form' | 'purchase' | 'error' | 'identify' | 'event';
 }
+
+interface RealtimeFeedEntry {
+  id: string;
+  type: 'visit' | 'click' | 'event' | 'purchase' | 'error' | 'identify';
+  user: string;
+  action: string;
+  target: string;
+  timestamp: number;
+}
+
+const timeAgo = (ts: number): string => {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 10) return 'Just now';
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return new Date(ts).toLocaleDateString();
+};
 
 export const LiveVisitors: React.FC<LiveVisitorsProps> = ({ onTriggerSimulatedHit, project, authHeaders }) => {
   const [visitors, setVisitors] = useState<LiveVisitorItem[]>([]);
@@ -41,62 +62,43 @@ export const LiveVisitors: React.FC<LiveVisitorsProps> = ({ onTriggerSimulatedHi
       if (project?.id) params.set('projectId', project.id);
       const qs = params.toString();
       const res = await fetch(`/api/v1/analytics/live${qs ? `?${qs}` : ''}`, { headers: authHeaders || {} });
+      if (!res.ok) throw new Error('bad response');
       const data = await res.json();
       setVisitors(data.visitors || []);
     } catch {
-      // Fallback live data
-      setVisitors([
-        {
-          sessionId: 'sess_live_1',
-          userId: 'Visitor #842 (John D.)',
-          country: 'United States',
-          city: 'San Francisco',
-          browser: 'Chrome',
-          device: 'desktop',
-          activePage: '/products/quantum-headphones',
-          durationSeconds: 142,
-          startedAt: Date.now() - 142000,
-          referrer: 'Google Search',
-        },
-        {
-          sessionId: 'sess_live_2',
-          userId: 'Visitor #843 (Sarah C.)',
-          country: 'United Kingdom',
-          city: 'London',
-          browser: 'Safari',
-          device: 'mobile',
-          activePage: '/checkout',
-          durationSeconds: 88,
-          startedAt: Date.now() - 88000,
-          referrer: 'Twitter / X',
-        },
-        {
-          sessionId: 'sess_live_3',
-          userId: 'Visitor #844',
-          country: 'Germany',
-          city: 'Berlin',
-          browser: 'Firefox',
-          device: 'desktop',
-          activePage: '/pricing',
-          durationSeconds: 310,
-          startedAt: Date.now() - 310000,
-          referrer: 'Direct',
-        },
-      ]);
+      setVisitors(db.getLiveVisitors(project?.id || db.projects[0].id));
+    }
+  };
+
+  const fetchFeed = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (project?.id) params.set('projectId', project.id);
+      const qs = params.toString();
+      const res = await fetch(`/api/v1/analytics/realtime${qs ? `?${qs}` : ''}`, { headers: authHeaders || {} });
+      if (!res.ok) throw new Error('bad response');
+      const data = await res.json();
+      const entries: RealtimeFeedEntry[] = data.entries || [];
+      setFeed(entries.map((e) => ({
+        id: e.id,
+        user: e.user,
+        action: e.action,
+        target: e.target,
+        timestamp: timeAgo(e.timestamp),
+        type: e.type,
+      })));
+    } catch {
+      // Keep the last successfully loaded feed
     }
   };
 
   useEffect(() => {
     fetchLive();
-    const interval = setInterval(fetchLive, 5000);
-
-    // Initial feed
-    setFeed([
-      { id: '1', user: 'Visitor #843', action: 'Clicked', target: 'Buy Now Button', timestamp: 'Just now', type: 'click' },
-      { id: '2', user: 'Visitor #842', action: 'Visited', target: '/products/quantum-headphones', timestamp: '12s ago', type: 'visit' },
-      { id: '3', user: 'Visitor #843', action: 'Completed', target: 'Order #ORD-9912 ($249.99)', timestamp: '45s ago', type: 'purchase' },
-      { id: '4', user: 'Visitor #844', action: 'Submitted Form', target: 'Newsletter Signup', timestamp: '2m ago', type: 'form' },
-    ]);
+    fetchFeed();
+    const interval = setInterval(() => {
+      fetchLive();
+      fetchFeed();
+    }, 5000);
 
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -205,6 +207,12 @@ export const LiveVisitors: React.FC<LiveVisitorsProps> = ({ onTriggerSimulatedHi
                       ? 'bg-indigo-500'
                       : item.type === 'form'
                       ? 'bg-amber-500'
+                      : item.type === 'error'
+                      ? 'bg-red-500'
+                      : item.type === 'identify'
+                      ? 'bg-slate-400'
+                      : item.type === 'event'
+                      ? 'bg-fuchsia-500'
                       : 'bg-cyan-500'
                   }`}
                 />

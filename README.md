@@ -76,28 +76,147 @@ All settings live in `.env` (see `.env.example`):
 | `GEMINI_RATE_MAX` / `GEMINI_RATE_WINDOW_MIN` | Max Gemini calls per project per window | `6` / `60` |
 | `GEMINI_MAX_ERRORS` / `GEMINI_MAX_VITALS` / `GEMINI_MAX_PAGES` | Prompt size caps for AI calls | `3` / `4` / `3` |
 
-### Adding tracking to a website
+## Installing tracking on your website
 
-Copy the snippet from the dashboard (Settings → Projects → Embed) or add it manually:
+Add one script tag to any site — plain HTML/CSS, a React app, or Next.js — and PulseTrack starts capturing page views, client-side route changes, clicks (with rage/dead-click detection), JavaScript errors, and Core Web Vitals. No cookies are used, so no consent banner is required.
+
+The SDK batches events every 5 seconds and flushes when the tab is hidden or the page unloads.
+
+### 1. Get your tracking snippet
+
+1. Sign in to your PulseTrack dashboard.
+2. Go to **Settings → Projects** and open the project for your site.
+3. Copy the **public key** (`pk_...`) and the **tracker URL** (`/tracker.min.js`).
+4. For local testing point the tracker at `http://localhost:3000/tracker.min.js`. In production use your deployed PulseTrack URL, e.g. `https://analytics.example.com/tracker.min.js`. In all examples below, replace both the script URL and `data-key` value with your own.
+
+### 2. HTML / CSS (static sites)
+
+Paste the snippet into the `<head>` of every page you want to track:
 
 ```html
-<script src="https://your-domain.com/tracker.min.js" data-key="pk_live_your_public_key" async></script>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>My Site</title>
+    <script src="https://analytics.example.com/tracker.min.js" data-key="pk_live_xxxxx" async></script>
+  </head>
+  <body>
+    <!-- your page content -->
+  </body>
+</html>
 ```
 
-The SDK automatically captures page views (including SPA route changes), clicks (with rage/dead-click detection), JavaScript errors, and Core Web Vitals approximations. It batches events every 5 seconds and flushes on page hide. No cookies are used.
+If your pages come from a template, static-site generator, or CMS, add the line to the shared layout so it appears on every page automatically.
 
-For manual tracking from your app:
+### 3. React (Vite, CRA, Remix, ...)
+
+Add the script to your app shell (`index.html` for Vite/CRA):
+
+```html
+<script src="https://analytics.example.com/tracker.min.js" data-key="pk_live_xxxxx" async></script>
+```
+
+Client-side route changes are detected automatically — the SDK wraps `history.pushState` / `replaceState` and listens for `popstate` — so page views are recorded without any extra code.
+
+For typed access to the manual API, copy `public/pulsetrack.d.ts` from this repo into your app's `src/` folder (Vite picks it up automatically) and use optional chaining:
+
+```ts
+window.pulsetrack?.track('AddToCart', { plan: 'pro' });
+```
+
+### 4. Next.js (App Router)
+
+Add the script to your root layout with `next/script` (`src/app/layout.tsx`):
+
+```tsx
+import Script from 'next/script';
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>
+        {children}
+        <Script
+          src="https://analytics.example.com/tracker.min.js"
+          data-key="pk_live_xxxxx"
+          strategy="afterInteractive"
+        />
+      </body>
+    </html>
+  );
+}
+```
+
+Next.js client-side navigation also goes through the History API, so the SDK records each route change automatically. In **client components**, call the API directly (the tracker only runs in the browser):
+
+```tsx
+'use client';
+
+export default function BuyButton() {
+  return (
+    <button onClick={() => window.pulsetrack?.track('CheckoutStarted', { plan: 'pro' })}>
+      Checkout
+    </button>
+  );
+}
+```
+
+**Next.js (Pages Router)** — same idea in `_app.tsx`:
+
+```tsx
+import Script from 'next/script';
+import type { AppProps } from 'next/app';
+
+export default function App({ Component, pageProps }: AppProps) {
+  return (
+    <>
+      <Component {...pageProps} />
+      <Script
+        src="https://analytics.example.com/tracker.min.js"
+        data-key="pk_live_xxxxx"
+        strategy="afterInteractive"
+      />
+    </>
+  );
+}
+```
+
+### 5. Manual events (custom conversions, users, errors)
+
+The SDK exposes `window.pulsetrack` once the script loads:
 
 ```js
-// Custom conversion events
+// Custom conversion events (show up in Funnels + Events)
 window.pulsetrack.track('AddToCart', { plan: 'pro' });
 
-// Identify signed-in users
+// Identify signed-in users (builds the User Explorer)
 window.pulsetrack.identify('user_42', { name: 'Jane Doe', email: 'jane@example.com' });
 
 // Report an error explicitly
 window.pulsetrack.trackError({ type: 'app_exception', message: 'Checkout failed', stack: err.stack });
 ```
+
+Guard calls with `window.pulsetrack?.` if the script may not have loaded yet.
+
+### 6. Verify it's working
+
+1. Open your site with the snippet installed.
+2. Open the dashboard → **Live** tab — your session should appear within seconds.
+3. Browse a few pages and click around, then check **Overview**, **Heatmaps**, and **Health**. Events arrive in ~5-second batches.
+4. Errors and Core Web Vitals are captured automatically and appear in the **Errors** and **Health** sections.
+
+### Notes
+
+- The script loads cross-origin from your PulseTrack server, so serve PulseTrack over **HTTPS** in production.
+- If your site uses a strict Content-Security-Policy, allow the tracker origin (your PulseTrack domain) in both `script-src` and `connect-src`:
+
+  ```http
+  script-src https://analytics.example.com;
+  connect-src https://analytics.example.com;
+  ```
+
+- The tracker never sets cookies and never reads them — sessions use an in-page session id, and visitors remain anonymous unless you call `identify()`.
 
 ## API
 
@@ -160,6 +279,7 @@ Scripts:
 ```
 server.ts                 Express server: API routes, ingest, aggregations, AI, static serving
 public/tracker.js         Tracking SDK (source); tracker.min.js is the served copy
+public/pulsetrack.d.ts    TypeScript declarations for window.pulsetrack (copy into your app for typing)
 src/
   components/             React dashboard (Auth, Overview, Live, Funnels, Heatmaps, Settings, ...)
   models/                 Mongoose schemas (User, Workspace, Project, Event, Session, ApiKey, ...)

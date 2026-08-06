@@ -48,6 +48,16 @@ interface OverviewDashboardProps {
   onNavigateTab: (tab: string) => void;
   onOpenExport?: () => void;
   currentProject?: Project;
+  authHeaders?: Record<string, string>;
+}
+
+interface RealtimeFeedEntry {
+  id: string;
+  type: 'visit' | 'click' | 'event' | 'purchase' | 'error' | 'identify';
+  user: string;
+  action: string;
+  target: string;
+  timestamp: number;
 }
 
 const COLORS = ['#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#ec4899'];
@@ -57,6 +67,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   timeframe,
   onNavigateTab,
   onOpenExport,
+  authHeaders,
   currentProject = {
     id: 'proj_default',
     workspaceId: 'ws_prod',
@@ -78,6 +89,27 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   const [zoomStartIndex, setZoomStartIndex] = React.useState<number | null>(null);
   const [zoomEndIndex, setZoomEndIndex] = React.useState<number | null>(null);
   const [chartStyle, setChartStyle] = React.useState<'area' | 'line'>('area');
+  const [realtimeFeed, setRealtimeFeed] = React.useState<RealtimeFeedEntry[]>([]);
+
+  const fetchRealtimeFeed = React.useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (currentProject?.id) params.set('projectId', currentProject.id);
+      const qs = params.toString();
+      const res = await fetch(`/api/v1/analytics/realtime${qs ? `?${qs}` : ''}`, { headers: authHeaders || {} });
+      if (!res.ok) return;
+      const data = await res.json();
+      setRealtimeFeed(data.entries || []);
+    } catch {
+      // Keep the last successfully loaded feed
+    }
+  }, [currentProject?.id, authHeaders]);
+
+  React.useEffect(() => {
+    fetchRealtimeFeed();
+    const interval = setInterval(fetchRealtimeFeed, 5000);
+    return () => clearInterval(interval);
+  }, [fetchRealtimeFeed]);
 
   const displayedSeries = React.useMemo(() => {
     if (zoomStartIndex !== null && zoomEndIndex !== null) {
@@ -120,16 +152,23 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
 
   const isZoomed = zoomStartIndex !== null && zoomEndIndex !== null;
 
-  const realtimeLogEntries = [
-    { time: '14:20:01', user: 'USR_942', action: 'visited', target: '/cart', targetColor: 'text-indigo-400' },
-    { time: '14:19:58', user: 'USR_102', action: 'clicked', target: 'BUY_NOW', targetColor: 'text-green-400 font-bold' },
-    { time: '14:19:42', user: 'USR_882', action: 'visited', target: '/checkout', targetColor: 'text-indigo-400' },
-    { time: '14:19:33', user: 'ERR_500', action: 'exception on', target: '/api/payment', targetColor: 'text-red-400 underline font-bold' },
-    { time: '14:19:10', user: 'USR_401', action: 'visited', target: '/', targetColor: 'text-indigo-400' },
-    { time: '14:18:55', user: 'USR_211', action: 'identified', target: 'jane@me.com', targetColor: 'text-zinc-500 italic' },
-    { time: '14:18:42', user: 'USR_003', action: 'visited', target: '/pricing', targetColor: 'text-indigo-400' },
-    { time: '14:18:12', user: 'USR_942', action: 'visited', target: '/products/smart-watch', targetColor: 'text-indigo-400' },
-  ];
+  const realtimeLogEntries = realtimeFeed.map((e) => ({
+    id: e.id,
+    time: new Date(e.timestamp).toLocaleTimeString('en-GB', { hour12: false }),
+    user: e.user,
+    action: e.action,
+    target: e.target,
+    targetColor:
+      e.type === 'error'
+        ? 'text-red-400 underline font-bold'
+        : e.type === 'click'
+        ? 'text-green-400 font-bold'
+        : e.type === 'purchase'
+        ? 'text-emerald-400 font-bold'
+        : e.type === 'identify'
+        ? 'text-zinc-500 italic'
+        : 'text-indigo-400',
+  }));
 
   return (
     <div className="space-y-4">
@@ -425,8 +464,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
           </div>
 
           <div className="flex-1 overflow-y-auto p-3 space-y-1.5 font-mono text-[10px]">
-            {realtimeLogEntries.map((log, i) => (
-              <div key={i} className="flex items-center gap-2 text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800/50 p-1 rounded cursor-pointer">
+            {realtimeLogEntries.map((log) => (
+              <div key={log.id} className="flex items-center gap-2 text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800/50 p-1 rounded cursor-pointer">
                 <span className="text-blue-500 font-medium">{log.time}</span>
                 <span className="text-slate-900 dark:text-white font-medium">{log.user}</span>
                 <span>{log.action}</span>
