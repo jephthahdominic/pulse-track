@@ -191,7 +191,7 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
                 <span className="text-xs font-bold text-slate-900 dark:text-white">New Project</span>
                 <button onClick={() => { setShowNewProject(false); setCreateError(''); }} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X className="w-4 h-4" /></button>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Project Name</label>
                   <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="My App" className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
@@ -218,7 +218,7 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
               {editingId === p.id ? (
                 /* Edit mode */
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Name</label>
                       <input value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white" />

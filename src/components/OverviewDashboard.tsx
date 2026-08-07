@@ -445,7 +445,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
             </ResponsiveContainer>
           </div>
 
-          <div className="border-t border-slate-200 dark:border-zinc-800 p-4 grid grid-cols-3 gap-4 bg-slate-50/50 dark:bg-zinc-900/20">
+          <div className="border-t border-slate-200 dark:border-zinc-800 p-4 grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50/50 dark:bg-zinc-900/20">
             <div className="space-y-1">
               <div className="text-[9px] text-slate-400 dark:text-zinc-500 font-bold uppercase">Top Page</div>
               <div className="text-xs font-mono font-medium truncate text-slate-800 dark:text-zinc-200">

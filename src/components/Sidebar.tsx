@@ -18,6 +18,7 @@ import {
   PanelLeftOpen,
   Pin,
   PinOff,
+  X,
 } from 'lucide-react';
 
 export type ActiveTab =
@@ -40,9 +41,11 @@ interface SidebarProps {
   activeTab: ActiveTab;
   onSelectTab: (tab: ActiveTab) => void;
   openTicketsCount?: number;
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, openTicketsCount = 2 }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, openTicketsCount = 2, mobileOpen = false, onCloseMobile }) => {
   // Pinned & Collapsed state persistence
   const [isPinned, setIsPinned] = useState<boolean>(() => {
     const saved = localStorage.getItem('sidebar_pinned');
@@ -66,7 +69,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, openTi
 
   // Determine actual expanded visual state
   // If pinned, it is always expanded. If unpinned and collapsed, hovering expands it temporarily.
-  const effectiveCollapsed = isPinned ? false : isCollapsed && !isHovered;
+  // Mobile drawer is always expanded.
+  const isMobile = mobileOpen;
+  const effectiveCollapsed = isMobile ? false : isPinned ? false : isCollapsed && !isHovered;
+
+  const selectTab = (tab: ActiveTab) => {
+    onSelectTab(tab);
+    if (onCloseMobile) onCloseMobile();
+  };
 
   const togglePin = () => {
     setIsPinned((prev) => {
@@ -107,16 +117,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, openTi
     { id: 'admin' as ActiveTab, label: 'Platform Admin', icon: ShieldAlert },
   ];
 
-  return (
-    <aside
-      onMouseEnter={() => !isPinned && setIsHovered(true)}
-      onMouseLeave={() => !isPinned && setIsHovered(false)}
-      className={`sticky top-14 self-start h-[calc(100vh-3.5rem)] overflow-y-auto border-r border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-[#09090b] flex flex-col justify-between shrink-0 hidden md:flex transition-all duration-300 ease-in-out z-20 ${
-        effectiveCollapsed ? 'w-16' : 'w-56'
-      }`}
-    >
+  const renderContent = () => (
+    <>
       <div className="p-3 space-y-4">
-        {/* Sidebar Controls (Pin / Expand / Collapse Toggle) */}
+        {/* Sidebar Controls (Pin / Expand / Collapse Toggle / Close on mobile) */}
         <div
           className={`flex items-center pb-2 border-b border-slate-200/80 dark:border-zinc-800/80 ${
             effectiveCollapsed ? 'justify-center' : 'justify-between px-1'
@@ -129,27 +133,38 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, openTi
           )}
 
           <div className="flex items-center space-x-1">
-            {/* Pin / Unpin Button */}
-            <button
-              onClick={togglePin}
-              title={isPinned ? 'Unpin sidebar (allow auto-collapse for chart space)' : 'Pin sidebar (keep expanded)'}
-              className={`p-1.5 rounded transition-all cursor-pointer ${
-                isPinned
-                  ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/25'
-                  : 'text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-800'
-              }`}
-            >
-              {isPinned ? <Pin className="w-3.5 h-3.5 fill-indigo-500/30" /> : <PinOff className="w-3.5 h-3.5" />}
-            </button>
+            {!isMobile && (
+              <button
+                onClick={togglePin}
+                title={isPinned ? 'Unpin sidebar (allow auto-collapse for chart space)' : 'Pin sidebar (keep expanded)'}
+                className={`p-1.5 rounded transition-all cursor-pointer ${
+                  isPinned
+                    ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/25'
+                    : 'text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-800'
+                }`}
+              >
+                {isPinned ? <Pin className="w-3.5 h-3.5 fill-indigo-500/30" /> : <PinOff className="w-3.5 h-3.5" />}
+              </button>
+            )}
 
-            {/* Collapse / Expand Button */}
-            <button
-              onClick={toggleCollapse}
-              title={effectiveCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
-              className="p-1.5 rounded text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-800 transition-all cursor-pointer"
-            >
-              {effectiveCollapsed ? <PanelLeftOpen className="w-3.5 h-3.5" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
-            </button>
+            {isMobile ? (
+              <button
+                onClick={() => onCloseMobile?.()}
+                title="Close navigation"
+                aria-label="Close navigation"
+                className="p-1.5 rounded text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-800 transition-all cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                onClick={toggleCollapse}
+                title={effectiveCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+                className="p-1.5 rounded text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-800 transition-all cursor-pointer"
+              >
+                {effectiveCollapsed ? <PanelLeftOpen className="w-3.5 h-3.5" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
+              </button>
+            )}
           </div>
         </div>
 
@@ -167,7 +182,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, openTi
               return (
                 <div key={item.id} className="relative group">
                   <button
-                    onClick={() => onSelectTab(item.id)}
+                    onClick={() => selectTab(item.id)}
                     className={`w-full flex items-center rounded text-xs font-medium transition-all ${
                       effectiveCollapsed ? 'justify-center py-2 px-0' : 'justify-between px-2 py-1.5'
                     } ${
@@ -248,7 +263,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, openTi
               return (
                 <div key={item.id} className="relative group">
                   <button
-                    onClick={() => onSelectTab(item.id)}
+                    onClick={() => selectTab(item.id)}
                     className={`w-full flex items-center rounded text-xs font-medium transition-all ${
                       effectiveCollapsed ? 'justify-center py-2 px-0' : 'justify-between px-2 py-1.5'
                     } ${
@@ -300,7 +315,41 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, openTi
           )}
         </div>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop sidebar */}
+      <aside
+        onMouseEnter={() => !isPinned && setIsHovered(true)}
+        onMouseLeave={() => !isPinned && setIsHovered(false)}
+        className={`sticky top-14 self-start h-[calc(100vh-3.5rem)] overflow-y-auto border-r border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-[#09090b] flex flex-col justify-between shrink-0 hidden md:flex transition-all duration-300 ease-in-out z-20 ${
+          effectiveCollapsed ? 'w-16' : 'w-56'
+        }`}
+      >
+        {renderContent()}
+      </aside>
+
+      {/* Mobile backdrop */}
+      {mobileOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+          onClick={() => onCloseMobile?.()}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Mobile drawer sidebar */}
+      <aside
+        className={`md:hidden fixed inset-y-0 left-0 z-50 w-64 bg-slate-50 dark:bg-[#09090b] border-r border-slate-200 dark:border-zinc-800 flex flex-col justify-between overflow-y-auto transition-transform duration-300 ease-in-out ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'
+        }`}
+        aria-label="Mobile navigation"
+      >
+        {renderContent()}
+      </aside>
+    </>
   );
 };
 

@@ -15,6 +15,7 @@ export interface IWorkspace extends Document {
   plan: 'Free' | 'Pro' | 'Business' | 'Enterprise';
   eventQuota: number;
   eventsUsed: number;
+  projectLimit?: number | null;
   ownerId: mongoose.Types.ObjectId;
   members: IWorkspaceMember[];
   createdAt: Date;
@@ -28,6 +29,7 @@ const WorkspaceSchema = new Schema<IWorkspace>(
     plan: { type: String, enum: ['Free', 'Pro', 'Business', 'Enterprise'], default: 'Free' },
     eventQuota: { type: Number, default: 100000 },
     eventsUsed: { type: Number, default: 0 },
+    projectLimit: { type: Number, default: null },
     ownerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     members: [
       {

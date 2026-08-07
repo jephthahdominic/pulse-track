@@ -160,7 +160,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             <label className="text-[10px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider">
               1. Select File Format
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
                 onClick={() => setExportFormat('csv')}
                 className={`flex items-center space-x-3 p-3 rounded-lg border text-left transition-all ${
@@ -203,7 +203,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <label className="text-[10px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider">
                 2. Select Dataset Module
               </label>
-              <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                 {[
                   { id: 'overview' as DatasetOption, label: 'Overview & KPIs', desc: 'Pageviews, trend, top pages' },
                   { id: 'sessions' as DatasetOption, label: 'User Sessions', desc: 'Browsers, devices, durations' },
@@ -218,7 +218,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                       selectedDataset === item.id
                         ? 'border-blue-500 bg-blue-50 dark:bg-zinc-800 text-blue-600 dark:text-blue-400 font-semibold'
                         : 'border-slate-200 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-800/50 text-slate-700 dark:text-zinc-300'
-                    } ${item.id === 'all' ? 'col-span-2' : ''}`}
+                    } ${item.id === 'all' ? 'sm:col-span-2' : ''}`}
                   >
                     <div className="font-bold text-xs">{item.label}</div>
                     <div className="text-[10px] text-slate-500 dark:text-zinc-400">{item.desc}</div>

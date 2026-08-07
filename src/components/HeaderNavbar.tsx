@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Download,
   LogOut,
+  Menu,
 } from 'lucide-react';
 import { Project, Workspace, Timeframe } from '../types';
 
@@ -29,6 +30,7 @@ interface HeaderNavbarProps {
   onOpenDemo: () => void;
   onOpenExport: () => void;
   onOpenCommandPalette?: () => void;
+  onOpenMobileNav?: () => void;
   onLogout?: () => void;
 }
 
@@ -44,6 +46,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
   onOpenDemo,
   onOpenExport,
   onOpenCommandPalette,
+  onOpenMobileNav,
   onLogout,
 }) => {
   const [showProjectDropdown, setShowProjectDropdown] = React.useState(false);
@@ -51,13 +54,23 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
   return (
     <header className="h-14 border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#09090b] px-4 lg:px-6 flex items-center justify-between sticky top-0 z-30 transition-colors">
       {/* Left: Logo & Project Switcher */}
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center space-x-2 sm:space-x-4 min-w-0">
+        {onOpenMobileNav && (
+          <button
+            onClick={onOpenMobileNav}
+            className="md:hidden p-1.5 rounded text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+            aria-label="Open navigation"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
+
         <div className="flex items-center space-x-2.5">
-          <div className="w-6 h-6 rounded bg-blue-600 flex items-center justify-center font-bold text-xs text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]">
+          <div className="w-6 h-6 rounded bg-blue-600 flex items-center justify-center font-bold text-xs text-white shadow-[0_0_15px_rgba(37,99,235,0.4)] shrink-0">
             P
           </div>
           <div className="flex items-center space-x-2">
-            <span className="font-semibold text-sm tracking-tight text-slate-900 dark:text-zinc-100">
+            <span className="hidden sm:inline font-semibold text-sm tracking-tight text-slate-900 dark:text-zinc-100">
               PulseTrack
             </span>
             <span className="hidden sm:flex items-center space-x-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
@@ -67,21 +80,21 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
           </div>
         </div>
 
-        <div className="h-4 w-px bg-slate-200 dark:bg-zinc-800 hidden sm:block" />
+        <div className="h-4 w-px bg-slate-200 dark:bg-zinc-800 hidden sm:block shrink-0" />
 
         {/* Project Selector Dropdown */}
-        <div className="relative">
+        <div className="relative min-w-0">
           <button
             onClick={() => setShowProjectDropdown(!showProjectDropdown)}
-            className="flex items-center space-x-2 px-2.5 py-1 rounded text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900/60 dark:hover:bg-zinc-800 text-slate-800 dark:text-zinc-300 border border-slate-200/80 dark:border-zinc-800 transition-all"
+            className="flex items-center space-x-2 px-2.5 py-1 rounded text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900/60 dark:hover:bg-zinc-800 text-slate-800 dark:text-zinc-300 border border-slate-200/80 dark:border-zinc-800 transition-all max-w-[52vw] sm:max-w-none"
           >
-            <Layers className="w-3.5 h-3.5 text-blue-500" />
-            <span className="max-w-[140px] truncate">{currentProject.name}</span>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            <Layers className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+            <span className="max-w-[100px] sm:max-w-[140px] truncate">{currentProject.name}</span>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           </button>
 
           {showProjectDropdown && (
-            <div className="absolute top-full left-0 mt-1.5 w-64 rounded-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xl py-1 z-50 text-xs">
+            <div className="absolute top-full left-0 mt-1.5 w-64 max-w-[calc(100vw-2rem)] rounded-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xl py-1 z-50 text-xs max-h-[70vh] overflow-y-auto">
               <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 border-b border-slate-100 dark:border-zinc-800">
                 Projects in {currentWorkspace.name}
               </div>
@@ -101,7 +114,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
                     <div className="text-[10px] text-slate-400 dark:text-zinc-500 truncate">{proj.domain}</div>
                   </div>
                   {proj.id === currentProject.id && (
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
                   )}
                 </button>
               ))}
@@ -147,7 +160,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
         </button>
 
         {/* Timeframe Selector */}
-        <div className="flex items-center bg-slate-100 dark:bg-zinc-900 rounded p-0.5 border border-slate-200/80 dark:border-zinc-800 text-xs">
+        <div className="hidden sm:flex items-center bg-slate-100 dark:bg-zinc-900 rounded p-0.5 border border-slate-200/80 dark:border-zinc-800 text-xs">
           {(['1h', '24h', '7d', '30d'] as Timeframe[]).map((tf) => (
             <button
               key={tf}

@@ -44,6 +44,7 @@ export default function App() {
   const [timeframe, setTimeframe] = useState<Timeframe>('7d');
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // ── Auth & server mode state ────────────────────────────────────────────────
   const [authToken, setAuthToken] = useState<string | null>(() => localStorage.getItem(AUTH_TOKEN_KEY));
@@ -92,6 +93,12 @@ export default function App() {
     if (darkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
   }, [darkMode]);
+
+  // Lock body scroll while the mobile nav drawer is open
+  useEffect(() => {
+    document.body.style.overflow = mobileNavOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [mobileNavOpen]);
 
   // ── On mount: check server status and validate stored token ────────────────
   useEffect(() => {
@@ -362,6 +369,7 @@ export default function App() {
         onOpenDemo={() => setActiveTab('sandbox')}
         onOpenExport={() => setIsExportModalOpen(true)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        onOpenMobileNav={() => setMobileNavOpen(true)}
         onLogout={isAuthRequired && authToken ? handleLogout : undefined}
       />
 
@@ -372,6 +380,8 @@ export default function App() {
           activeTab={activeTab}
           onSelectTab={(tab) => setActiveTab(tab)}
           openTicketsCount={supportTickets.filter((t) => t.status === 'open').length}
+          mobileOpen={mobileNavOpen}
+          onCloseMobile={() => setMobileNavOpen(false)}
         />
 
         {/* Primary View Area */}

@@ -24,6 +24,9 @@ import { SupportTicketModel } from './src/models/SupportTicketModel.js';
 // Auth middleware
 import { requireAuth, AuthenticatedRequest } from './src/middleware/auth.js';
 
+// Plan configuration (project limits etc.)
+import { resolveProjectLimit } from './src/config/plans.js';
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function genPublicKey() { return `pk_live_${randomBytes(12).toString('hex')}`; }
 function genSecretKey() { return `sk_live_${randomBytes(12).toString('hex')}`; }
@@ -282,7 +285,7 @@ async function buildAuthPayload(userId: string, workspaceId: string) {
   const apiKeys = await ApiKeyModel.find({ projectId: { $in: projectIds } }).lean();
   return {
     user: { id: (user as any)._id.toString(), name: (user as any).name, email: (user as any).email },
-    workspace: { id: (workspace as any)._id.toString(), name: (workspace as any).name, slug: (workspace as any).slug, plan: (workspace as any).plan, eventQuota: (workspace as any).eventQuota, eventsUsed: (workspace as any).eventsUsed, members: (workspace as any).members || [] },
+    workspace: { id: (workspace as any)._id.toString(), name: (workspace as any).name, slug: (workspace as any).slug, plan: (workspace as any).plan, eventQuota: (workspace as any).eventQuota, eventsUsed: (workspace as any).eventsUsed, projectLimit: (workspace as any).projectLimit ?? null, members: (workspace as any).members || [] },
     projects: (projects as any[]).map((p) => ({ id: p._id.toString(), name: p.name, domain: p.domain, publicKey: p.publicKey, secretKey: p.secretKey, status: p.status, aiInsightsEnabled: (p as any).aiInsightsEnabled !== false, healthInsightsEnabled: (p as any).healthInsightsEnabled !== false, activeVisitors: 0, totalEvents24h: 0, workspaceId: p.workspaceId.toString(), createdAt: p.createdAt })),
     apiKeys: (apiKeys as any[]).map((k) => ({ id: k._id.toString(), projectId: k.projectId.toString(), name: k.name, key: k.key, type: k.type, lastUsedAt: k.lastUsedAt, createdAt: k.createdAt })),
   };
@@ -760,7 +763,7 @@ async function startServer() {
       try {
         const workspace = await WorkspaceModel.findById(decoded.workspaceId).lean();
         if (!workspace) { res.status(404).json({ error: 'Workspace not found.' }); return; }
-        res.json({ workspaces: [{ id: (workspace as any)._id.toString(), name: (workspace as any).name, slug: (workspace as any).slug, plan: (workspace as any).plan, eventQuota: (workspace as any).eventQuota, eventsUsed: (workspace as any).eventsUsed, members: (workspace as any).members }] });
+        res.json({ workspaces: [{ id: (workspace as any)._id.toString(), name: (workspace as any).name, slug: (workspace as any).slug, plan: (workspace as any).plan, eventQuota: (workspace as any).eventQuota, eventsUsed: (workspace as any).eventsUsed, projectLimit: (workspace as any).projectLimit ?? null, members: (workspace as any).members }] });
       } catch { res.status(500).json({ error: 'Failed to fetch workspace.' }); }
     } else {
       res.json({ workspaces: db.workspaces });
@@ -785,6 +788,16 @@ async function startServer() {
     const { name, domain } = req.body;
     if (!name || !domain) { res.status(400).json({ error: 'Project name and domain are required.' }); return; }
     try {
+      const workspace = await WorkspaceModel.findById(new mongoose.Types.ObjectId(decoded.workspaceId)).lean();
+      if (!workspace) { res.status(404).json({ error: 'Workspace not found.' }); return; }
+      const projectLimit = resolveProjectLimit((workspace as any).plan, (workspace as any).projectLimit);
+      if (projectLimit !== null) {
+        const activeCount = await ProjectModel.countDocuments({ workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId), status: { $ne: 'archived' } });
+        if (activeCount >= projectLimit) {
+          res.status(402).json({ error: `Project limit reached (${projectLimit}). Upgrade your plan to add more projects.` });
+          return;
+        }
+      }
       const publicKey = genPublicKey(); const secretKey = genSecretKey();
       const project = new ProjectModel({ workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId), name: name.trim(), domain: domain.trim().replace(/^https?:\/\//, ''), publicKey, secretKey, status: 'active' });
       await project.save();
@@ -852,7 +865,7 @@ async function startServer() {
       if (!workspace) { res.status(404).json({ error: 'Workspace not found.' }); return; }
       if (req.body.name) workspace.name = req.body.name.trim();
       await workspace.save();
-      res.json({ id: workspace._id.toString(), name: workspace.name, slug: workspace.slug, plan: workspace.plan, eventQuota: workspace.eventQuota, eventsUsed: workspace.eventsUsed, members: workspace.members });
+      res.json({ id: workspace._id.toString(), name: workspace.name, slug: workspace.slug, plan: workspace.plan, eventQuota: workspace.eventQuota, eventsUsed: workspace.eventsUsed, projectLimit: (workspace as any).projectLimit ?? null, members: workspace.members });
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
