@@ -38,9 +38,13 @@ import {
 import { db } from './services/db';
 
 const AUTH_TOKEN_KEY = 'pulsetrack_auth_token';
+const DARK_MODE_KEY = 'pulsetrack_dark_mode';
 
 export default function App() {
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem(DARK_MODE_KEY);
+    return saved !== null ? saved === 'true' : true;
+  });
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
   const [timeframe, setTimeframe] = useState<Timeframe>('7d');
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -90,10 +94,10 @@ export default function App() {
   const [heatmapClicks, setHeatmapClicks] = useState<HeatmapPoint[]>([]);
   const [funnels, setFunnels] = useState<any[]>([]);
 
-  // Sync dark mode class on document element
+  // Sync dark mode class on document element + persist preference
   useEffect(() => {
-    if (darkMode) document.documentElement.classList.add('dark');
-    else document.documentElement.classList.remove('dark');
+    document.documentElement.classList.toggle('dark', darkMode);
+    localStorage.setItem(DARK_MODE_KEY, JSON.stringify(darkMode));
   }, [darkMode]);
 
   // Lock body scroll while the mobile nav drawer is open
