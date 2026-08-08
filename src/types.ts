@@ -183,6 +183,35 @@ export interface UserProfile {
   totalSpent?: number;
 }
 
+export type SessionTimelineEventType = 'pageview' | 'custom' | 'click' | 'error' | 'performance' | 'identify';
+
+export interface SessionTimelineEvent {
+  id: string;
+  sessionId: string;
+  projectId: string;
+  type: SessionTimelineEventType;
+  timestamp: number;
+  url?: string;
+  path?: string;
+  title?: string;
+  referrer?: string;
+  durationMs?: number;
+  scrollDepthPercentage?: number;
+  targetTag?: string;
+  targetText?: string;
+  isRageClick?: boolean;
+  isDeadClick?: boolean;
+  eventName?: string;
+  properties?: Record<string, any>;
+  errorType?: string;
+  message?: string;
+  statusCode?: number;
+  vitalName?: string;
+  vitalValue?: number;
+  vitalRating?: 'good' | 'needs-improvement' | 'poor';
+  traits?: Record<string, any>;
+}
+
 export interface SupportTicket {
   id: string;
   workspaceId: string;

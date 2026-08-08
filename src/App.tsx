@@ -423,7 +423,7 @@ export default function App() {
           )}
 
           {activeTab === 'sessions' && (
-            <SessionsExplorer sessions={sessions} />
+            <SessionsExplorer sessions={sessions} authHeaders={authHeaders()} />
           )}
 
           {activeTab === 'users' && (

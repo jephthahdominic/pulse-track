@@ -625,6 +625,38 @@ async function startServer() {
     } catch (err: any) { res.status(500).json({ error: 'Failed to fetch sessions.' }); }
   });
 
+  app.get('/api/v1/analytics/sessions/:sessionId/timeline', async (req: AuthenticatedRequest, res) => {
+    try {
+      const { sessionId } = req.params;
+      if (isMongoConnected()) {
+        const decoded = extractJWT(req); if (!decoded) { res.status(401).json({ error: 'Authentication required.' }); return; }
+        const projectId = req.query.projectId as string; if (!projectId) { res.status(400).json({ error: 'projectId is required.' }); return; }
+        const project = await ProjectModel.findOne({ _id: new mongoose.Types.ObjectId(projectId), workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId) });
+        if (!project) { res.status(403).json({ error: 'Project not found or access denied.' }); return; }
+        const events = await EventModel.find({ sessionId, projectId: new mongoose.Types.ObjectId(projectId) }).sort({ timestamp: 1 }).lean();
+        const timeline = (events as any[])
+          .map((e) => {
+            const d = e.data || {};
+            const base = { id: e._id.toString(), sessionId: e.sessionId, projectId: e.projectId.toString(), timestamp: new Date(e.timestamp).getTime(), url: d.url || '' };
+            switch (e.type) {
+              case 'pageview': return { ...base, type: 'pageview' as const, path: d.path, title: d.title, referrer: d.referrer, durationMs: d.durationMs, scrollDepthPercentage: d.scrollDepthPercentage };
+              case 'custom':
+              case 'event': return { ...base, type: 'custom' as const, eventName: d.eventName || 'Custom Action', properties: d.properties || {} };
+              case 'click': return { ...base, type: 'click' as const, targetTag: d.targetTag, targetText: d.targetText, isRageClick: !!d.isRageClick, isDeadClick: !!d.isDeadClick };
+              case 'error': return { ...base, type: 'error' as const, errorType: d.type || 'js_exception', message: d.message, statusCode: d.statusCode };
+              case 'performance': return { ...base, type: 'performance' as const, vitalName: d.name, vitalValue: d.value, vitalRating: d.rating };
+              case 'identify': return { ...base, type: 'identify' as const, eventName: 'User Identified', traits: d.traits || {} };
+              default: return null;
+            }
+          })
+          .filter(Boolean);
+        res.json({ timeline });
+      } else {
+        res.json({ timeline: db.getSessionTimeline(sessionId) });
+      }
+    } catch (err: any) { console.error('[Timeline Error]', err); res.status(500).json({ error: 'Failed to fetch session timeline.' }); }
+  });
+
   app.get('/api/v1/analytics/events', async (req: AuthenticatedRequest, res) => {
     try {
       if (isMongoConnected()) {

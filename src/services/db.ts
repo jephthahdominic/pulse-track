@@ -15,6 +15,7 @@ import {
   OverviewStats,
   AdminPlatformStats,
   Timeframe,
+  SessionTimelineEvent,
 } from '../types';
 
 class AnalyticsDatabase {
@@ -804,6 +805,89 @@ class AnalyticsDatabase {
     project.totalEvents24h += events.length;
 
     return { success: true, ingested: events.length };
+  }
+
+  public getSessionTimeline(sessionId: string): SessionTimelineEvent[] {
+    const events: SessionTimelineEvent[] = [];
+
+    this.pageViews.forEach((pv) => {
+      if (pv.sessionId !== sessionId) return;
+      events.push({
+        id: pv.id,
+        sessionId: pv.sessionId,
+        projectId: pv.projectId,
+        type: 'pageview',
+        timestamp: pv.timestamp,
+        url: pv.url,
+        path: pv.path,
+        title: pv.title,
+        referrer: pv.referrer,
+        durationMs: pv.durationMs,
+        scrollDepthPercentage: pv.scrollDepthPercentage,
+      });
+    });
+
+    this.clickEvents.forEach((c) => {
+      if (c.sessionId !== sessionId) return;
+      events.push({
+        id: c.id,
+        sessionId: c.sessionId,
+        projectId: c.projectId,
+        type: 'click',
+        timestamp: c.timestamp,
+        url: c.url,
+        targetTag: c.targetTag,
+        targetText: c.targetText,
+        isRageClick: c.isRageClick,
+        isDeadClick: c.isDeadClick,
+      });
+    });
+
+    this.customEvents.forEach((e) => {
+      if (e.sessionId !== sessionId) return;
+      events.push({
+        id: e.id,
+        sessionId: e.sessionId,
+        projectId: e.projectId,
+        type: 'custom',
+        timestamp: e.timestamp,
+        url: e.url,
+        eventName: e.eventName,
+        properties: e.properties,
+      });
+    });
+
+    this.errorLogs.forEach((er) => {
+      if (er.sessionId !== sessionId) return;
+      events.push({
+        id: er.id,
+        sessionId: er.sessionId,
+        projectId: er.projectId,
+        type: 'error',
+        timestamp: er.timestamp,
+        url: er.url,
+        errorType: er.type,
+        message: er.message,
+        statusCode: er.statusCode,
+      });
+    });
+
+    this.webVitals.forEach((w) => {
+      if (w.sessionId !== sessionId) return;
+      events.push({
+        id: w.id,
+        sessionId: w.sessionId,
+        projectId: w.projectId,
+        type: 'performance',
+        timestamp: w.timestamp,
+        url: w.url,
+        vitalName: w.name,
+        vitalValue: w.value,
+        vitalRating: w.rating,
+      });
+    });
+
+    return events.sort((a, b) => a.timestamp - b.timestamp);
   }
 
   public getAdminStats(): AdminPlatformStats {
