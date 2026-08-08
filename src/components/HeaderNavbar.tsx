@@ -101,10 +101,10 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
         <div className="relative min-w-0" ref={projectDropdownRef}>
           <button
             onClick={() => setShowProjectDropdown(!showProjectDropdown)}
-            className="flex items-center space-x-2 px-2.5 py-1 rounded text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900/60 dark:hover:bg-zinc-800 text-slate-800 dark:text-zinc-300 border border-slate-200/80 dark:border-zinc-800 transition-all max-w-[52vw] sm:max-w-none"
+            className="flex items-center space-x-2 px-2.5 py-1 rounded text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900/60 dark:hover:bg-zinc-800 text-slate-800 dark:text-zinc-300 border border-slate-200/80 dark:border-zinc-800 transition-all max-w-[38vw] sm:max-w-none"
           >
             <Layers className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-            <span className="max-w-[100px] sm:max-w-[140px] truncate">{currentProject.name}</span>
+            <span className="max-w-[70px] sm:max-w-[140px] truncate">{currentProject.name}</span>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           </button>
 

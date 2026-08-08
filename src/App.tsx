@@ -384,7 +384,7 @@ export default function App() {
   }
 
   return (
-    <div className={`min-h-screen font-sans bg-slate-100 dark:bg-[#09090b] text-slate-900 dark:text-zinc-100 transition-colors ${darkMode ? 'dark' : ''}`}>
+    <div className="min-h-screen font-sans bg-slate-100 dark:bg-[#09090b] text-slate-900 dark:text-zinc-100 transition-colors">
       {/* Top Header */}
       <HeaderNavbar
         currentWorkspace={currentWorkspace}
