@@ -54,6 +54,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
   const [showProjectDropdown, setShowProjectDropdown] = React.useState(false);
   const [showUserMenu, setShowUserMenu] = React.useState(false);
   const userMenuRef = React.useRef<HTMLDivElement>(null);
+  const projectDropdownRef = React.useRef<HTMLDivElement>(null);
 
   const getInitials = (name: string) =>
     name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '').join('') || 'U';
@@ -62,6 +63,9 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
     const handleClickOutside = (e: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
         setShowUserMenu(false);
+      }
+      if (projectDropdownRef.current && !projectDropdownRef.current.contains(e.target as Node)) {
+        setShowProjectDropdown(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -100,7 +104,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
         <div className="h-4 w-px bg-slate-200 dark:bg-zinc-800 hidden sm:block shrink-0" />
 
         {/* Project Selector Dropdown */}
-        <div className="relative min-w-0">
+        <div className="relative min-w-0" ref={projectDropdownRef}>
           <button
             onClick={() => setShowProjectDropdown(!showProjectDropdown)}
             className="flex items-center space-x-2 px-2.5 py-1 rounded text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900/60 dark:hover:bg-zinc-800 text-slate-800 dark:text-zinc-300 border border-slate-200/80 dark:border-zinc-800 transition-all max-w-[52vw] sm:max-w-none"
@@ -141,7 +145,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
       </div>
 
       {/* Right Controls */}
-      <div className="flex items-center space-x-3">
+      <div className="relative flex items-center space-x-3 z-[60]">
         {/* Quick Search / Command Palette Trigger */}
         <button
           onClick={onOpenCommandPalette}
