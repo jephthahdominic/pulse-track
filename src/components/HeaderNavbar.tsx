@@ -196,8 +196,10 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
           ))}
         </div>
 
-        {/* Calendar / Date Picker */}
-        <DatePicker value={selectedDate} onChange={onSelectDate} />
+        {/* Calendar / Date Picker (desktop+ — mobile uses the Overview filter strip) */}
+        <div className="hidden sm:block">
+          <DatePicker value={selectedDate} onChange={onSelectDate} />
+        </div>
 
         {/* User Profile Menu */}
         <div className="relative flex items-center pl-2 border-l border-slate-200 dark:border-zinc-800" ref={userMenuRef}>

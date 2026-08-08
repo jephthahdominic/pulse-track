@@ -5,6 +5,7 @@ interface DatePickerProps {
   value: string | null;
   onChange: (date: string | null) => void;
   maxDate?: Date;
+  forceShowLabel?: boolean;
 }
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
@@ -13,7 +14,7 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 const pad = (n: number) => String(n).padStart(2, '0');
 const toISO = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, maxDate }) => {
+export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, maxDate, forceShowLabel }) => {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState(() => {
     const d = value ? parseISO(value) : new Date();
@@ -90,7 +91,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, maxDate
         }`}
       >
         <CalendarDays className="w-3.5 h-3.5 shrink-0" />
-        <span className="hidden sm:inline">{displayLabel}</span>
+        <span className={forceShowLabel ? 'inline' : 'hidden sm:inline'}>{displayLabel}</span>
         {value && (
           <span
             role="button"

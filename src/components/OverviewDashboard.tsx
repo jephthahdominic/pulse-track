@@ -42,11 +42,14 @@ import {
 } from 'recharts';
 import { OverviewStats, Timeframe, Project } from '../types';
 import { AIInsightsWidget } from './AIInsightsWidget';
+import { DatePicker } from './DatePicker';
 
 interface OverviewDashboardProps {
   stats: OverviewStats;
   timeframe: Timeframe;
   date?: string | null;
+  onSelectDate?: (date: string | null) => void;
+  onSelectTimeframe?: (tf: Timeframe) => void;
   onNavigateTab: (tab: string) => void;
   onOpenExport?: () => void;
   currentProject?: Project;
@@ -68,6 +71,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   stats,
   timeframe,
   date,
+  onSelectDate,
+  onSelectTimeframe,
   onNavigateTab,
   onOpenExport,
   authHeaders,
@@ -187,6 +192,26 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Mobile-only range + date filter strip (keeps the header uncrowded) */}
+      <div className="flex sm:hidden items-center justify-between gap-2">
+        <div className="flex items-center bg-slate-100 dark:bg-zinc-900 rounded p-0.5 border border-slate-200/80 dark:border-zinc-800 text-xs">
+          {(['1h', '24h', '7d', '30d'] as Timeframe[]).map((tf) => (
+            <button
+              key={tf}
+              onClick={() => { onSelectDate?.(null); onSelectTimeframe?.(tf); }}
+              className={`px-2 py-0.5 rounded text-[11px] font-medium transition-all ${
+                timeframe === tf && !date
+                  ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-blue-400 font-semibold shadow-xs'
+                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
+              }`}
+            >
+              {tf.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        <DatePicker value={date ?? null} onChange={(d) => onSelectDate?.(d)} forceShowLabel />
+      </div>
+
       {dateLabel && (
         <div className="flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/25 text-indigo-700 dark:text-indigo-300 shadow-sm">
           <span className="flex items-center gap-2 text-xs font-semibold">

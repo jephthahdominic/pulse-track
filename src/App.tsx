@@ -428,6 +428,8 @@ export default function App() {
               stats={overviewStats}
               timeframe={timeframe}
               date={selectedDate}
+              onSelectDate={setSelectedDate}
+              onSelectTimeframe={setTimeframe}
               currentProject={currentProject}
               onNavigateTab={(tab: any) => setActiveTab(tab)}
               onOpenExport={() => setIsExportModalOpen(true)}
