@@ -4,8 +4,6 @@ import {
   ChevronDown,
   Clock,
   Search,
-  Moon,
-  Sun,
   Layers,
   Sparkles,
   Plus,
@@ -26,8 +24,6 @@ interface HeaderNavbarProps {
   user: User;
   onSelectProject: (project: Project) => void;
   onSelectTimeframe: (timeframe: Timeframe) => void;
-  darkMode: boolean;
-  onToggleDarkMode: () => void;
   onOpenDemo: () => void;
   onOpenExport: () => void;
   onOpenCommandPalette?: () => void;
@@ -43,8 +39,6 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
   user,
   onSelectProject,
   onSelectTimeframe,
-  darkMode,
-  onToggleDarkMode,
   onOpenDemo,
   onOpenExport,
   onOpenCommandPalette,
@@ -196,15 +190,6 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
             </button>
           ))}
         </div>
-
-        {/* Dark Mode Toggle */}
-        <button
-          onClick={onToggleDarkMode}
-          className="p-1.5 rounded text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
-          title="Toggle Dark/Light Mode"
-        >
-          {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
-        </button>
 
         {/* User Profile Menu */}
         <div className="relative flex items-center pl-2 border-l border-slate-200 dark:border-zinc-800" ref={userMenuRef}>

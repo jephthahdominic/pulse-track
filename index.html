@@ -6,8 +6,16 @@
     <title>Pulse Track</title>
     <script>
       (function () {
-        var saved = localStorage.getItem('pulsetrack_dark_mode');
-        if (saved !== 'false') document.documentElement.classList.add('dark');
+        try {
+          var mode = localStorage.getItem('pulsetrack_theme_mode');
+          if (mode !== 'light' && mode !== 'dark' && mode !== 'system') mode = 'dark';
+          var dark =
+            mode === 'dark' ||
+            (mode === 'system' &&
+              window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.classList.add('dark');
+        } catch (e) {}
       })();
     </script>
   </head>

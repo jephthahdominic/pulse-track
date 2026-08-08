@@ -31,6 +31,7 @@ import {
   SupportTicket,
   AdminPlatformStats,
   Timeframe,
+  ThemeMode,
   WebVitalMetric,
   UserProfile,
   HeatmapPoint,
@@ -38,13 +39,17 @@ import {
 import { db } from './services/db';
 
 const AUTH_TOKEN_KEY = 'pulsetrack_auth_token';
-const DARK_MODE_KEY = 'pulsetrack_dark_mode';
+const THEME_MODE_KEY = 'pulsetrack_theme_mode';
 
 export default function App() {
-  const [darkMode, setDarkMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem(DARK_MODE_KEY);
-    return saved !== null ? saved === 'true' : true;
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
+    const saved = localStorage.getItem(THEME_MODE_KEY);
+    return saved === 'light' || saved === 'dark' || saved === 'system' ? saved : 'dark';
   });
+  const [systemDark, setSystemDark] = useState<boolean>(() =>
+    typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)').matches : true
+  );
+  const darkMode = themeMode === 'system' ? systemDark : themeMode === 'dark';
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
   const [timeframe, setTimeframe] = useState<Timeframe>('7d');
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -97,8 +102,18 @@ export default function App() {
   // Sync dark mode class on document element + persist preference
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
-    localStorage.setItem(DARK_MODE_KEY, JSON.stringify(darkMode));
-  }, [darkMode]);
+    localStorage.setItem(THEME_MODE_KEY, themeMode);
+  }, [darkMode, themeMode]);
+
+  // Track OS theme changes so "system" mode stays adaptive in real time
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    setSystemDark(mq.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   // Lock body scroll while the mobile nav drawer is open
   useEffect(() => {
@@ -380,8 +395,6 @@ export default function App() {
         user={currentUser}
         onSelectProject={(proj) => setCurrentProject(proj)}
         onSelectTimeframe={(tf) => setTimeframe(tf)}
-        darkMode={darkMode}
-        onToggleDarkMode={() => setDarkMode(!darkMode)}
         onOpenDemo={() => setActiveTab('sandbox')}
         onOpenExport={() => setIsExportModalOpen(true)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
@@ -468,6 +481,8 @@ export default function App() {
               onRegenerateKeys={handleRegenerateKeys}
               onRenameWorkspace={handleRenameWorkspace}
               onSelectProject={(proj) => setCurrentProject(proj)}
+              themeMode={themeMode}
+              onSetThemeMode={setThemeMode}
             />
           )}
 
@@ -495,8 +510,8 @@ export default function App() {
         onSelectProject={(proj) => setCurrentProject(proj)}
         timeframe={timeframe}
         onSelectTimeframe={(tf) => setTimeframe(tf)}
-        darkMode={darkMode}
-        onToggleDarkMode={() => setDarkMode(!darkMode)}
+        themeMode={themeMode}
+        onSetThemeMode={setThemeMode}
         onOpenDemo={() => setActiveTab('sandbox')}
         onOpenExport={() => setIsExportModalOpen(true)}
       />

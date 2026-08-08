@@ -1,5 +1,7 @@
 export type Timeframe = '1h' | '24h' | '7d' | '30d' | '90d';
 
+export type ThemeMode = 'light' | 'dark' | 'system';
+
 export interface User {
   id: string;
   name: string;

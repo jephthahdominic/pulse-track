@@ -16,13 +16,14 @@ import {
   Download,
   Moon,
   Sun,
+  MonitorSmartphone,
   Layers,
   Clock,
   ArrowRight,
   Terminal,
 } from 'lucide-react';
 import { ActiveTab } from './Sidebar';
-import { Project, Timeframe } from '../types';
+import { Project, Timeframe, ThemeMode } from '../types';
 
 export interface CommandPaletteProps {
   isOpen: boolean;
@@ -33,8 +34,8 @@ export interface CommandPaletteProps {
   onSelectProject: (project: Project) => void;
   timeframe: Timeframe;
   onSelectTimeframe: (tf: Timeframe) => void;
-  darkMode: boolean;
-  onToggleDarkMode: () => void;
+  themeMode: ThemeMode;
+  onSetThemeMode: (mode: ThemeMode) => void;
   onOpenDemo: () => void;
   onOpenExport: () => void;
 }
@@ -57,8 +58,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onSelectProject,
   timeframe,
   onSelectTimeframe,
-  darkMode,
-  onToggleDarkMode,
+  themeMode,
+  onSetThemeMode,
   onOpenDemo,
   onOpenExport,
 }) => {
@@ -269,11 +270,16 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     },
     {
       id: 'act-theme',
-      label: darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+      label:
+        themeMode === 'dark'
+          ? 'Theme: switch to Light'
+          : themeMode === 'light'
+          ? 'Theme: switch to Adaptive (system)'
+          : 'Theme: switch to Dark',
       category: 'Quick Actions',
-      icon: darkMode ? Sun : Moon,
+      icon: themeMode === 'dark' ? Sun : themeMode === 'light' ? MonitorSmartphone : Moon,
       action: () => {
-        onToggleDarkMode();
+        onSetThemeMode(themeMode === 'dark' ? 'light' : themeMode === 'light' ? 'system' : 'dark');
         onClose();
       },
     },
