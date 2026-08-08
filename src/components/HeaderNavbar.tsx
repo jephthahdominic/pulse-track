@@ -15,7 +15,7 @@ import {
   LogOut,
   Menu,
 } from 'lucide-react';
-import { Project, Workspace, Timeframe } from '../types';
+import { Project, Workspace, User, Timeframe } from '../types';
 
 interface HeaderNavbarProps {
   currentWorkspace: Workspace;
@@ -23,6 +23,7 @@ interface HeaderNavbarProps {
   projects: Project[];
   workspaces: Workspace[];
   timeframe: Timeframe;
+  user: User;
   onSelectProject: (project: Project) => void;
   onSelectTimeframe: (timeframe: Timeframe) => void;
   darkMode: boolean;
@@ -39,6 +40,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
   currentProject,
   projects,
   timeframe,
+  user,
   onSelectProject,
   onSelectTimeframe,
   darkMode,
@@ -50,6 +52,21 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
   onLogout,
 }) => {
   const [showProjectDropdown, setShowProjectDropdown] = React.useState(false);
+  const [showUserMenu, setShowUserMenu] = React.useState(false);
+  const userMenuRef = React.useRef<HTMLDivElement>(null);
+
+  const getInitials = (name: string) =>
+    name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '').join('') || 'U';
+
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   return (
     <header className="h-14 border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#09090b] px-4 lg:px-6 flex items-center justify-between sticky top-0 z-30 transition-colors">
@@ -185,21 +202,41 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
           {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
         </button>
 
-        {/* User Profile Avatar + Logout */}
-        <div className="flex items-center space-x-2 pl-2 border-l border-slate-200 dark:border-zinc-800">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 p-0.5">
-            <div className="w-full h-full bg-zinc-900 rounded-full flex items-center justify-center text-white text-[10px] font-bold">
-              AR
+        {/* User Profile Menu */}
+        <div className="relative flex items-center pl-2 border-l border-slate-200 dark:border-zinc-800" ref={userMenuRef}>
+          <button
+            onClick={() => setShowUserMenu((v) => !v)}
+            title="Open profile menu"
+            className="flex items-center space-x-1.5 rounded p-1 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+            aria-expanded={showUserMenu}
+            aria-label="Open profile menu"
+          >
+            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 p-0.5">
+              <div className="w-full h-full bg-zinc-900 rounded-full flex items-center justify-center text-white text-[10px] font-bold">
+                {getInitials(user.name)}
+              </div>
             </div>
-          </div>
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              title="Sign out"
-              className="p-1.5 rounded text-slate-500 dark:text-zinc-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
+            <ChevronDown
+              className={`w-3.5 h-3.5 text-slate-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {showUserMenu && (
+            <div className="absolute top-full right-0 mt-1.5 w-56 rounded-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xl py-1 z-50 text-xs">
+              <div className="px-3 py-2 border-b border-slate-100 dark:border-zinc-800">
+                <div className="font-semibold text-slate-900 dark:text-zinc-100 truncate">{user.name}</div>
+                <div className="text-[10px] text-slate-500 dark:text-zinc-500 truncate mt-0.5">{user.email}</div>
+              </div>
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  className="w-full text-left px-3 py-2 mt-1 flex items-center gap-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign out</span>
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

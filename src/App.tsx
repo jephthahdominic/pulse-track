@@ -22,6 +22,7 @@ import { AuthPage, AuthUserData } from './components/AuthPage';
 import {
   Workspace,
   Project,
+  User,
   ApiKey,
   OverviewStats,
   UserSession,
@@ -50,6 +51,7 @@ export default function App() {
   const [authToken, setAuthToken] = useState<string | null>(() => localStorage.getItem(AUTH_TOKEN_KEY));
   const [isAuthRequired, setIsAuthRequired] = useState(false);  // true when MongoDB is live
   const [authLoading, setAuthLoading] = useState(true);         // checking server status on mount
+  const [currentUser, setCurrentUser] = useState<User>(db.workspaces[0].members[0]);
 
   // Global Keyboard Shortcut Listener for CMD+K / CTRL+K
   useEffect(() => {
@@ -144,6 +146,14 @@ export default function App() {
     setAuthToken(token);
     localStorage.setItem(AUTH_TOKEN_KEY, token);
 
+    setCurrentUser({
+      id: data.user.id,
+      name: data.user.name,
+      email: data.user.email,
+      role: 'owner',
+      createdAt: new Date().toISOString(),
+    });
+
     const ws: Workspace = {
       id: data.workspace.id,
       name: data.workspace.name,
@@ -190,6 +200,7 @@ export default function App() {
     localStorage.removeItem(AUTH_TOKEN_KEY);
     setAuthToken(null);
     // Reset to demo data
+    setCurrentUser(db.workspaces[0].members[0]);
     setWorkspaces(db.workspaces);
     setCurrentWorkspace(db.workspaces[0]);
     setProjects(db.projects);
@@ -362,6 +373,7 @@ export default function App() {
         projects={projects}
         workspaces={workspaces}
         timeframe={timeframe}
+        user={currentUser}
         onSelectProject={(proj) => setCurrentProject(proj)}
         onSelectTimeframe={(tf) => setTimeframe(tf)}
         darkMode={darkMode}
@@ -380,6 +392,7 @@ export default function App() {
           activeTab={activeTab}
           onSelectTab={(tab) => setActiveTab(tab)}
           openTicketsCount={supportTickets.filter((t) => t.status === 'open').length}
+          user={currentUser}
           mobileOpen={mobileNavOpen}
           onCloseMobile={() => setMobileNavOpen(false)}
         />

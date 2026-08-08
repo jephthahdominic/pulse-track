@@ -20,6 +20,7 @@ import {
   PinOff,
   X,
 } from 'lucide-react';
+import { User } from '../types';
 
 export type ActiveTab =
   | 'overview'
@@ -41,11 +42,12 @@ interface SidebarProps {
   activeTab: ActiveTab;
   onSelectTab: (tab: ActiveTab) => void;
   openTicketsCount?: number;
+  user: User;
   mobileOpen?: boolean;
   onCloseMobile?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, openTicketsCount = 2, mobileOpen = false, onCloseMobile }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, openTicketsCount = 2, user, mobileOpen = false, onCloseMobile }) => {
   // Pinned & Collapsed state persistence
   const [isPinned, setIsPinned] = useState<boolean>(() => {
     const saved = localStorage.getItem('sidebar_pinned');
@@ -305,12 +307,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, openTi
           }`}
         >
           <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 shrink-0 flex items-center justify-center text-[10px] text-white font-bold shadow-xs">
-            AR
+            {user.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '').join('') || 'U'}
           </div>
           {!effectiveCollapsed && (
             <div className="flex-1 overflow-hidden">
-              <div className="text-[10px] font-bold text-slate-800 dark:text-zinc-200 truncate">Alex Rivera</div>
-              <div className="text-[9px] text-slate-500 dark:text-zinc-500 truncate">Pro Workspace</div>
+              <div className="text-[10px] font-bold text-slate-800 dark:text-zinc-200 truncate">{user.name}</div>
+              <div className="text-[9px] text-slate-500 dark:text-zinc-500 truncate">{user.email}</div>
             </div>
           )}
         </div>
