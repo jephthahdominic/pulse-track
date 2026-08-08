@@ -21,6 +21,7 @@ import {
   Clock,
   ArrowRight,
   Terminal,
+  CalendarX2,
 } from 'lucide-react';
 import { ActiveTab } from './Sidebar';
 import { Project, Timeframe, ThemeMode } from '../types';
@@ -33,7 +34,9 @@ export interface CommandPaletteProps {
   currentProject: Project;
   onSelectProject: (project: Project) => void;
   timeframe: Timeframe;
+  selectedDate: string | null;
   onSelectTimeframe: (tf: Timeframe) => void;
+  onSelectDate: (date: string | null) => void;
   themeMode: ThemeMode;
   onSetThemeMode: (mode: ThemeMode) => void;
   onOpenDemo: () => void;
@@ -57,7 +60,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   currentProject,
   onSelectProject,
   timeframe,
+  selectedDate,
   onSelectTimeframe,
+  onSelectDate,
   themeMode,
   onSetThemeMode,
   onOpenDemo,
@@ -240,9 +245,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       label: `Set Timeframe to ${tf.toUpperCase()}`,
       category: 'Timeframe' as const,
       icon: Clock,
-      badge: tf === timeframe ? 'CURRENT' : undefined,
+      badge: tf === timeframe && !selectedDate ? 'CURRENT' : undefined,
       action: () => {
         onSelectTimeframe(tf);
+        onSelectDate(null);
         onClose();
       },
     })),
@@ -268,6 +274,18 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         onClose();
       },
     },
+    ...(selectedDate
+      ? [{
+          id: 'act-clear-date',
+          label: `Clear custom date (${selectedDate})`,
+          category: 'Quick Actions' as const,
+          icon: CalendarX2,
+          action: () => {
+            onSelectDate(null);
+            onClose();
+          },
+        }]
+      : []),
     {
       id: 'act-theme',
       label:

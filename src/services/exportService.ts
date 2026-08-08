@@ -22,13 +22,13 @@ export function triggerFileDownload(filename: string, content: string, contentTy
 /**
  * Export Overview Traffic & Metrics to CSV
  */
-export function exportOverviewCSV(project: Project, stats: OverviewStats, timeframe: string) {
+export function exportOverviewCSV(project: Project, stats: OverviewStats, timeframe: string, date?: string) {
   const lines: string[] = [];
 
   // Report Header
   lines.push(`"# PulseTrack Analytics Overview Report"`);
   lines.push(`"# Project: ${project.name} (${project.domain})"`);
-  lines.push(`"# Timeframe: ${timeframe.toUpperCase()}"`);
+  lines.push(`"# Timeframe: ${timeframe.toUpperCase()}${date ? ` (Custom day: ${date})` : ''}"`);
   lines.push(`"# Generated At: ${new Date().toISOString()}"`);
   lines.push('');
 
@@ -170,8 +170,8 @@ export function exportErrorsCSV(project: Project, errors: ErrorLog[]) {
 /**
  * Export Full Project Analytics Snapshot as JSON
  */
-export function exportProjectJSON(project: Project, workspace: Workspace, timeframe: string) {
-  const overviewStats = db.getOverviewStats(project.id, timeframe as any);
+export function exportProjectJSON(project: Project, workspace: Workspace, timeframe: string, date?: string) {
+  const overviewStats = db.getOverviewStats(project.id, timeframe as any, date);
   const projectSessions = db.sessions.filter((s) => s.projectId === project.id);
   const projectEvents = db.customEvents.filter((e) => e.projectId === project.id);
   const projectErrors = db.errorLogs.filter((err) => err.projectId === project.id);
@@ -184,6 +184,7 @@ export function exportProjectJSON(project: Project, workspace: Workspace, timefr
       exporterApp: 'PulseTrack Enterprise Realtime Analytics',
       formatVersion: '1.0.0',
       timeframe: timeframe,
+      date: date || null,
     },
     workspace: {
       id: workspace.id,

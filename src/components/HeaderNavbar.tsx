@@ -14,6 +14,7 @@ import {
   Menu,
 } from 'lucide-react';
 import { Project, Workspace, User, Timeframe } from '../types';
+import { DatePicker } from './DatePicker';
 
 interface HeaderNavbarProps {
   currentWorkspace: Workspace;
@@ -21,9 +22,11 @@ interface HeaderNavbarProps {
   projects: Project[];
   workspaces: Workspace[];
   timeframe: Timeframe;
+  selectedDate: string | null;
   user: User;
   onSelectProject: (project: Project) => void;
   onSelectTimeframe: (timeframe: Timeframe) => void;
+  onSelectDate: (date: string | null) => void;
   onOpenDemo: () => void;
   onOpenExport: () => void;
   onOpenCommandPalette?: () => void;
@@ -36,9 +39,11 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
   currentProject,
   projects,
   timeframe,
+  selectedDate,
   user,
   onSelectProject,
   onSelectTimeframe,
+  onSelectDate,
   onOpenDemo,
   onOpenExport,
   onOpenCommandPalette,
@@ -175,13 +180,13 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
         </button>
 
         {/* Timeframe Selector */}
-        <div className="hidden sm:flex items-center bg-slate-100 dark:bg-zinc-900 rounded p-0.5 border border-slate-200/80 dark:border-zinc-800 text-xs">
+        <div className={`hidden sm:flex items-center bg-slate-100 dark:bg-zinc-900 rounded p-0.5 border border-slate-200/80 dark:border-zinc-800 text-xs ${selectedDate ? 'opacity-60' : ''}`}>
           {(['1h', '24h', '7d', '30d'] as Timeframe[]).map((tf) => (
             <button
               key={tf}
-              onClick={() => onSelectTimeframe(tf)}
+              onClick={() => { onSelectDate(null); onSelectTimeframe(tf); }}
               className={`px-2 py-0.5 rounded text-[11px] font-medium transition-all ${
-                timeframe === tf
+                timeframe === tf && !selectedDate
                   ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-blue-400 font-semibold shadow-xs'
                   : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
               }`}
@@ -190,6 +195,9 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
             </button>
           ))}
         </div>
+
+        {/* Calendar / Date Picker */}
+        <DatePicker value={selectedDate} onChange={onSelectDate} />
 
         {/* User Profile Menu */}
         <div className="relative flex items-center pl-2 border-l border-slate-200 dark:border-zinc-800" ref={userMenuRef}>

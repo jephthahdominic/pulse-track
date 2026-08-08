@@ -52,6 +52,7 @@ export default function App() {
   const darkMode = themeMode === 'system' ? systemDark : themeMode === 'dark';
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
   const [timeframe, setTimeframe] = useState<Timeframe>('7d');
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -233,14 +234,18 @@ export default function App() {
   // ── Fetch / Sync data ───────────────────────────────────────────────────────
   const refreshData = async () => {
     try {
+      const params = new URLSearchParams();
+      params.set('projectId', currentProject.id);
+      params.set('timeframe', timeframe);
+      if (selectedDate) params.set('date', selectedDate);
       const res = await fetch(
-        `/api/v1/analytics/overview?projectId=${currentProject.id}&timeframe=${timeframe}`,
+        `/api/v1/analytics/overview?${params.toString()}`,
         { headers: authHeaders() }
       );
       if (res.ok) {
         setOverviewStats(await res.json());
       } else {
-        setOverviewStats(db.getOverviewStats(currentProject.id, timeframe));
+        setOverviewStats(db.getOverviewStats(currentProject.id, timeframe, selectedDate || undefined));
       }
 
       // Fetch sessions, events, errors if authenticated
@@ -264,13 +269,13 @@ export default function App() {
       if (funnelRes.status === 'fulfilled' && funnelRes.value.ok) { const d = await funnelRes.value.json(); setFunnels(d.funnels || []); }
       setAdminStats(db.getAdminStats());
     } catch {
-      setOverviewStats(db.getOverviewStats(currentProject.id, timeframe));
+      setOverviewStats(db.getOverviewStats(currentProject.id, timeframe, selectedDate || undefined));
     }
   };
 
   useEffect(() => {
     refreshData();
-  }, [currentProject.id, timeframe, authToken]);
+  }, [currentProject.id, timeframe, selectedDate, authToken]);
 
   // Handle live test hit simulation
   const handleSimulatedHit = () => {
@@ -392,9 +397,11 @@ export default function App() {
         projects={projects}
         workspaces={workspaces}
         timeframe={timeframe}
+        selectedDate={selectedDate}
         user={currentUser}
         onSelectProject={(proj) => setCurrentProject(proj)}
         onSelectTimeframe={(tf) => setTimeframe(tf)}
+        onSelectDate={(date) => setSelectedDate(date)}
         onOpenDemo={() => setActiveTab('sandbox')}
         onOpenExport={() => setIsExportModalOpen(true)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
@@ -420,6 +427,7 @@ export default function App() {
             <OverviewDashboard
               stats={overviewStats}
               timeframe={timeframe}
+              date={selectedDate}
               currentProject={currentProject}
               onNavigateTab={(tab: any) => setActiveTab(tab)}
               onOpenExport={() => setIsExportModalOpen(true)}
@@ -509,7 +517,9 @@ export default function App() {
         currentProject={currentProject}
         onSelectProject={(proj) => setCurrentProject(proj)}
         timeframe={timeframe}
+        selectedDate={selectedDate}
         onSelectTimeframe={(tf) => setTimeframe(tf)}
+        onSelectDate={(date) => setSelectedDate(date)}
         themeMode={themeMode}
         onSetThemeMode={setThemeMode}
         onOpenDemo={() => setActiveTab('sandbox')}
@@ -523,6 +533,7 @@ export default function App() {
         currentProject={currentProject}
         currentWorkspace={currentWorkspace}
         timeframe={timeframe}
+        date={selectedDate}
         stats={overviewStats}
       />
     </div>

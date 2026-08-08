@@ -32,6 +32,14 @@ function genPublicKey() { return `pk_live_${randomBytes(12).toString('hex')}`; }
 function genSecretKey() { return `sk_live_${randomBytes(12).toString('hex')}`; }
 function makeSlug(name: string) { return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + randomBytes(3).toString('hex'); }
 function timeframeToMs(tf: string): number { const m: Record<string, number> = { '1h': 3600000, '24h': 86400000, '7d': 604800000, '30d': 2592000000, '90d': 7776000000 }; return m[tf] || 604800000; }
+function parseDateInput(s: string | undefined): { start: Date; end: Date } | null {
+  if (!s) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return null;
+  const start = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0);
+  if (isNaN(start.getTime())) return null;
+  return { start, end: new Date(start.getTime() + 86400000) };
+}
 function signJWT(userId: string, workspaceId: string): string { return jwt.sign({ userId, workspaceId }, process.env.JWT_SECRET!, { expiresIn: '30d' }); }
 function verifyJWT(token: string): { userId: string; workspaceId: string } | null { try { return jwt.verify(token, process.env.JWT_SECRET!) as any; } catch { return null; } }
 function extractJWT(req: express.Request): { userId: string; workspaceId: string } | null { const h = req.headers.authorization; if (!h?.startsWith('Bearer ')) return null; return verifyJWT(h.slice(7)); }
@@ -111,14 +119,16 @@ setInterval(() => {
 
 
 // ─── MongoDB analytics aggregation ───────────────────────────────────────────
-async function getRealOverviewStats(projectId: string, timeframe: string) {
-  const since = new Date(Date.now() - timeframeToMs(timeframe));
+async function getRealOverviewStats(projectId: string, timeframe: string, date?: string) {
   const pid = new mongoose.Types.ObjectId(projectId);
+  const range = date ? parseDateInput(date) : null;
+  const since = range ? range.start : new Date(Date.now() - timeframeToMs(timeframe));
+  const until = range ? range.end : new Date();
   const [pageviews, sessions, errors, webVitals] = await Promise.all([
-    EventModel.find({ projectId: pid, type: 'pageview', timestamp: { $gte: since } }).lean(),
-    SessionModel.find({ projectId: pid, startedAt: { $gte: since } }).lean(),
-    EventModel.find({ projectId: pid, type: 'error', timestamp: { $gte: since } }).lean(),
-    EventModel.find({ projectId: pid, type: 'performance' }).lean(),
+    EventModel.find({ projectId: pid, type: 'pageview', timestamp: { $gte: since, $lt: until } }).lean(),
+    SessionModel.find({ projectId: pid, startedAt: { $gte: since, $lt: until } }).lean(),
+    EventModel.find({ projectId: pid, type: 'error', timestamp: { $gte: since, $lt: until } }).lean(),
+    EventModel.find({ projectId: pid, type: 'performance', timestamp: { $gte: since, $lt: until } }).lean(),
   ]);
   const totalVisitors = pageviews.length;
   const uniqueVisitors = new Set(pageviews.map((p) => p.sessionId)).size;
@@ -141,11 +151,20 @@ async function getRealOverviewStats(projectId: string, timeframe: string) {
   (sessions as any[]).forEach((s) => { const b = s.device?.browser || 'Unknown'; browserMap[b] = (browserMap[b] || 0) + 1; });
   const topBrowsers = Object.entries(browserMap).map(([name, count]) => ({ name, count }));
   const hourlySeries = [];
-  for (let h = 23; h >= 0; h--) {
-    const slotStart = new Date(Date.now() - h * 3600000);
-    const slotEnd = new Date(Date.now() - (h - 1) * 3600000);
-    const pvCount = (pageviews as any[]).filter((p) => { const t = new Date(p.timestamp); return t >= slotStart && t < slotEnd; }).length;
-    hourlySeries.push({ time: `${slotStart.getHours()}:00`, pageViews: pvCount, visitors: Math.floor(pvCount * 0.7), sessions: Math.floor(pvCount * 0.5) });
+  if (range) {
+    for (let h = 0; h < 24; h++) {
+      const slotStart = new Date(range.start.getTime() + h * 3600000);
+      const slotEnd = new Date(slotStart.getTime() + 3600000);
+      const pvCount = (pageviews as any[]).filter((p) => { const t = new Date(p.timestamp); return t >= slotStart && t < slotEnd; }).length;
+      hourlySeries.push({ time: `${h}:00`, pageViews: pvCount, visitors: Math.floor(pvCount * 0.7), sessions: Math.floor(pvCount * 0.5) });
+    }
+  } else {
+    for (let h = 23; h >= 0; h--) {
+      const slotStart = new Date(Date.now() - h * 3600000);
+      const slotEnd = new Date(Date.now() - (h - 1) * 3600000);
+      const pvCount = (pageviews as any[]).filter((p) => { const t = new Date(p.timestamp); return t >= slotStart && t < slotEnd; }).length;
+      hourlySeries.push({ time: `${slotStart.getHours()}:00`, pageViews: pvCount, visitors: Math.floor(pvCount * 0.7), sessions: Math.floor(pvCount * 0.5) });
+    }
   }
   let webVitalsScore = 100;
   (webVitals as any[]).forEach((v) => { if (v.data?.rating === 'poor') webVitalsScore -= 5; else if (v.data?.rating === 'needs-improvement') webVitalsScore -= 2; });
@@ -447,14 +466,15 @@ async function startServer() {
   app.get('/api/v1/analytics/overview', async (req: AuthenticatedRequest, res) => {
     try {
       const timeframe = (req.query.timeframe as string) || '7d';
+      const date = (req.query.date as string) || undefined;
       if (isMongoConnected()) {
         const decoded = extractJWT(req); if (!decoded) { res.status(401).json({ error: 'Authentication required.' }); return; }
         const projectId = req.query.projectId as string; if (!projectId) { res.status(400).json({ error: 'projectId is required.' }); return; }
         const project = await ProjectModel.findOne({ _id: new mongoose.Types.ObjectId(projectId), workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId) });
         if (!project) { res.status(403).json({ error: 'Project not found or access denied.' }); return; }
-        res.json(await getRealOverviewStats(projectId, timeframe));
+        res.json(await getRealOverviewStats(projectId, timeframe, date));
       } else {
-        res.json(db.getOverviewStats((req.query.projectId as string) || db.projects[0].id, timeframe as any));
+        res.json(db.getOverviewStats((req.query.projectId as string) || db.projects[0].id, timeframe as any, date));
       }
     } catch (err: any) { console.error('[Overview Error]', err); res.status(500).json({ error: 'Failed to fetch analytics.' }); }
   });

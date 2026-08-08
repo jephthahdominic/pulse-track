@@ -29,6 +29,7 @@ interface ExportModalProps {
   currentProject: Project;
   currentWorkspace: Workspace;
   timeframe: Timeframe;
+  date?: string | null;
   stats: OverviewStats;
 }
 
@@ -40,6 +41,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   currentProject,
   currentWorkspace,
   timeframe,
+  date,
   stats,
 }) => {
   const [selectedDataset, setSelectedDataset] = useState<DatasetOption>('overview');
@@ -52,19 +54,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   const handleExport = () => {
     // Refresh stats if timeframe changed
-    const activeStats = db.getOverviewStats(currentProject.id, selectedTimeframe as any);
+    const activeStats = db.getOverviewStats(currentProject.id, selectedTimeframe as any, date || undefined);
     const sessions = db.sessions.filter((s) => s.projectId === currentProject.id);
     const events = db.customEvents.filter((e) => e.projectId === currentProject.id);
     const errors = db.errorLogs.filter((err) => err.projectId === currentProject.id);
 
     if (exportFormat === 'json') {
-      exportProjectJSON(currentProject, currentWorkspace, selectedTimeframe);
+      exportProjectJSON(currentProject, currentWorkspace, selectedTimeframe, date || undefined);
       setLastExportMessage(`Exported ${currentProject.name} full JSON report!`);
     } else {
       // CSV Export based on selected dataset
       switch (selectedDataset) {
         case 'overview':
-          exportOverviewCSV(currentProject, activeStats, selectedTimeframe);
+          exportOverviewCSV(currentProject, activeStats, selectedTimeframe, date || undefined);
           setLastExportMessage(`Exported Overview CSV for ${selectedTimeframe.toUpperCase()}`);
           break;
         case 'sessions':
@@ -81,7 +83,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           break;
         case 'all':
         default:
-          exportOverviewCSV(currentProject, activeStats, selectedTimeframe);
+          exportOverviewCSV(currentProject, activeStats, selectedTimeframe, date || undefined);
           exportSessionsCSV(currentProject, sessions);
           exportEventsCSV(currentProject, events);
           exportErrorsCSV(currentProject, errors);
@@ -96,7 +98,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   };
 
   const handleCopyJSON = () => {
-    const activeStats = db.getOverviewStats(currentProject.id, selectedTimeframe as any);
+    const activeStats = db.getOverviewStats(currentProject.id, selectedTimeframe as any, date || undefined);
     const sessions = db.sessions.filter((s) => s.projectId === currentProject.id);
     const events = db.customEvents.filter((e) => e.projectId === currentProject.id);
     const errors = db.errorLogs.filter((err) => err.projectId === currentProject.id);
@@ -107,6 +109,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       domain: currentProject.domain,
       exportedAt: new Date().toISOString(),
       timeframe: selectedTimeframe,
+      date: date || null,
       overview: activeStats,
       sessions,
       events,
@@ -234,8 +237,16 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <label className="text-[10px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider">
                 Timeframe Filter
               </label>
-              <span className="text-[10px] text-slate-400 font-mono">Current: {selectedTimeframe.toUpperCase()}</span>
+              <span className="text-[10px] text-slate-400 font-mono">
+                {date ? `Custom: ${date}` : `Current: ${selectedTimeframe.toUpperCase()}`}
+              </span>
             </div>
+            {date && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[11px] font-medium">
+                <Calendar className="w-3.5 h-3.5 shrink-0" />
+                Reporting metrics for the single day {date}
+              </div>
+            )}
             <div className="flex bg-slate-100 dark:bg-zinc-900 rounded p-1 border border-slate-200 dark:border-zinc-800 text-xs">
               {(['1h', '24h', '7d', '30d'] as Timeframe[]).map((tf) => (
                 <button

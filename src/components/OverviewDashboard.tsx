@@ -20,6 +20,7 @@ import {
   ZoomOut,
   RotateCcw,
   SlidersHorizontal,
+  Calendar,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -45,6 +46,7 @@ import { AIInsightsWidget } from './AIInsightsWidget';
 interface OverviewDashboardProps {
   stats: OverviewStats;
   timeframe: Timeframe;
+  date?: string | null;
   onNavigateTab: (tab: string) => void;
   onOpenExport?: () => void;
   currentProject?: Project;
@@ -65,6 +67,7 @@ const COLORS = ['#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#ec4899'];
 export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   stats,
   timeframe,
+  date,
   onNavigateTab,
   onOpenExport,
   authHeaders,
@@ -120,6 +123,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   }, [fetchRealtimeFeed]);
 
   const realtimeTotalPages = Math.max(1, Math.ceil(realtimeTotal / realtimePageSize));
+
+  const dateLabel = date ? new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) : null;
 
   const displayedSeries = React.useMemo(() => {
     if (zoomStartIndex !== null && zoomEndIndex !== null) {
@@ -182,6 +187,16 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
 
   return (
     <div className="space-y-4">
+      {dateLabel && (
+        <div className="flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/25 text-indigo-700 dark:text-indigo-300 shadow-sm">
+          <span className="flex items-center gap-2 text-xs font-semibold">
+            <Calendar className="w-4 h-4 shrink-0" />
+            Viewing metrics for <strong>{dateLabel}</strong> — hourly breakdown below reflects this single day.
+          </span>
+          <span className="text-[10px] font-mono text-indigo-400 dark:text-indigo-400/70">{date}</span>
+        </div>
+      )}
+
       {/* KPI Stat Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Pageviews */}
@@ -345,7 +360,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
               <span><strong>Click & drag</strong> across graph area to zoom into specific date/time ranges.</span>
             </span>
             <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono hidden md:inline">
-              Showing {displayedSeries.length} hourly data points
+              {dateLabel ? `${dateLabel} · ` : ''}Showing {displayedSeries.length} hourly data points
             </span>
           </div>
 

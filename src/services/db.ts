@@ -559,10 +559,41 @@ class AnalyticsDatabase {
   }
 
   // --- API Methods ---
-  public getOverviewStats(projectId: string, timeframe: Timeframe = '7d'): OverviewStats {
-    const pvs = this.pageViews.filter((p) => p.projectId === projectId);
-    const sess = this.sessions.filter((s) => s.projectId === projectId);
-    const errs = this.errorLogs.filter((e) => e.projectId === projectId);
+  public getOverviewStats(projectId: string, timeframe: Timeframe = '7d', date?: string): OverviewStats {
+    let pvs = this.pageViews.filter((p) => p.projectId === projectId);
+    let sess = this.sessions.filter((s) => s.projectId === projectId);
+    let errs = this.errorLogs.filter((e) => e.projectId === projectId);
+
+    const hourlySeries: Array<{ time: string; pageViews: number; visitors: number; sessions: number }> = [];
+
+    if (date) {
+      // Drill into a single calendar day (YYYY-MM-DD, local time)
+      const [start, end] = this.localDayRange(date);
+      pvs = pvs.filter((p) => p.timestamp >= start && p.timestamp < end);
+      sess = sess.filter((s) => s.startedAt >= start && s.startedAt < end);
+      errs = errs.filter((e) => e.timestamp >= start && e.timestamp < end);
+
+      const perHour = new Array<number>(24).fill(0);
+      pvs.forEach((p) => { perHour[new Date(p.timestamp).getHours()]++; });
+      for (let h = 0; h < 24; h++) {
+        const pvCount = perHour[h];
+        hourlySeries.push({ time: `${h}:00`, pageViews: pvCount, visitors: Math.floor(pvCount * 0.7), sessions: Math.floor(pvCount * 0.5) });
+      }
+    } else {
+      const now = Date.now();
+      for (let h = 23; h >= 0; h--) {
+        const timeLabel = `${23 - h}:00`;
+        const pvCount = Math.floor(Math.random() * 80) + 40;
+        const visCount = Math.floor(pvCount * 0.7);
+        const sessCount = Math.floor(pvCount * 0.5);
+        hourlySeries.push({
+          time: timeLabel,
+          pageViews: pvCount,
+          visitors: visCount,
+          sessions: sessCount,
+        });
+      }
+    }
 
     const totalVisitors = pvs.length;
     const uniqueVisitors = new Set(pvs.map((p) => p.sessionId)).size;
@@ -628,22 +659,6 @@ class AnalyticsDatabase {
     });
     const topBrowsers = Object.entries(browserMap).map(([name, count]) => ({ name, count }));
 
-    // Timeseries (last 24 hours / 7 days hourly buckets)
-    const hourlySeries = [];
-    const now = Date.now();
-    for (let h = 23; h >= 0; h--) {
-      const timeLabel = `${23 - h}:00`;
-      const pvCount = Math.floor(Math.random() * 80) + 40;
-      const visCount = Math.floor(pvCount * 0.7);
-      const sessCount = Math.floor(pvCount * 0.5);
-      hourlySeries.push({
-        time: timeLabel,
-        pageViews: pvCount,
-        visitors: visCount,
-        sessions: sessCount,
-      });
-    }
-
     return {
       totalVisitors,
       uniqueVisitors,
@@ -659,6 +674,12 @@ class AnalyticsDatabase {
       topBrowsers,
       hourlySeries,
     };
+  }
+
+  private localDayRange(dateStr: string): [number, number] {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const start = new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
+    return [start, start + 86400000];
   }
 
   public getLiveVisitors(projectId: string, limit = 50, offset = 0) {
