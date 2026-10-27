@@ -305,7 +305,7 @@ async function buildAuthPayload(userId: string, workspaceId: string) {
   return {
     user: { id: (user as any)._id.toString(), name: (user as any).name, email: (user as any).email },
     workspace: { id: (workspace as any)._id.toString(), name: (workspace as any).name, slug: (workspace as any).slug, plan: (workspace as any).plan, eventQuota: (workspace as any).eventQuota, eventsUsed: (workspace as any).eventsUsed, projectLimit: (workspace as any).projectLimit ?? null, members: (workspace as any).members || [] },
-    projects: (projects as any[]).map((p) => ({ id: p._id.toString(), name: p.name, domain: p.domain, publicKey: p.publicKey, secretKey: p.secretKey, status: p.status, aiInsightsEnabled: (p as any).aiInsightsEnabled !== false, healthInsightsEnabled: (p as any).healthInsightsEnabled !== false, activeVisitors: 0, totalEvents24h: 0, workspaceId: p.workspaceId.toString(), createdAt: p.createdAt })),
+    projects: (projects as any[]).map((p) => ({ id: p._id.toString(), name: p.name, domain: p.domain, publicKey: p.publicKey, secretKey: p.secretKey, status: p.status, aiInsightsEnabled: (p as any).aiInsightsEnabled !== false, healthInsightsEnabled: (p as any).healthInsightsEnabled !== false, seenHosts: (p as any).seenHosts || [], lastEventAt: p.lastEventAt || null, activeVisitors: 0, totalEvents24h: 0, workspaceId: p.workspaceId.toString(), createdAt: p.createdAt })),
     apiKeys: (apiKeys as any[]).map((k) => ({ id: k._id.toString(), projectId: k.projectId.toString(), name: k.name, key: k.key, type: k.type, lastUsedAt: k.lastUsedAt, createdAt: k.createdAt })),
   };
 }
@@ -404,6 +404,11 @@ async function startServer() {
         const keyDoc = await ApiKeyModel.findOne({ key: apiKey });
         if (!keyDoc) { res.status(401).json({ error: 'Invalid API key.' }); return; }
         keyDoc.lastUsedAt = new Date(); await keyDoc.save();
+        const hosts = new Set<string>();
+        for (const h of [req.headers.origin as string | undefined, ...events.map((e: any) => e?.data?.url)]) {
+          try { if (h) hosts.add(new URL(h).hostname); } catch { /* ignore malformed url */ }
+        }
+        await ProjectModel.updateOne({ _id: keyDoc.projectId }, { $set: { lastEventAt: new Date() }, ...(hosts.size ? { $addToSet: { seenHosts: { $each: [...hosts].slice(0, 5) } } } : {}) });
         const result = await ingestEventsToMongo(keyDoc.projectId as any, keyDoc.workspaceId as any, sessionId || `sess_${Date.now()}`, events, clientIP(req));
         res.json(result);
       } else {
@@ -827,7 +832,7 @@ async function startServer() {
       const decoded = extractJWT(req); if (!decoded) { res.status(401).json({ error: 'Authentication required.' }); return; }
       try {
         const projects = await ProjectModel.find({ workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId) }).lean();
-        res.json({ projects: (projects as any[]).map((p) => ({ id: p._id.toString(), name: p.name, domain: p.domain, publicKey: p.publicKey, secretKey: p.secretKey, status: p.status, aiInsightsEnabled: (p as any).aiInsightsEnabled !== false, healthInsightsEnabled: (p as any).healthInsightsEnabled !== false, workspaceId: p.workspaceId.toString(), activeVisitors: 0, totalEvents24h: 0, createdAt: p.createdAt })) });
+        res.json({ projects: (projects as any[]).map((p) => ({ id: p._id.toString(), name: p.name, domain: p.domain, publicKey: p.publicKey, secretKey: p.secretKey, status: p.status, aiInsightsEnabled: (p as any).aiInsightsEnabled !== false, healthInsightsEnabled: (p as any).healthInsightsEnabled !== false, workspaceId: p.workspaceId.toString(), seenHosts: (p as any).seenHosts || [], lastEventAt: p.lastEventAt || null, activeVisitors: 0, totalEvents24h: 0, createdAt: p.createdAt })) });
       } catch { res.status(500).json({ error: 'Failed to fetch projects.' }); }
     } else {
       res.json({ projects: db.projects.filter((p) => p.workspaceId === ((req.query.workspaceId as string) || db.workspaces[0].id)) });
@@ -854,7 +859,7 @@ async function startServer() {
       const project = new ProjectModel({ workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId), name: name.trim(), domain: domain.trim().replace(/^https?:\/\//, ''), publicKey, secretKey, status: 'active' });
       await project.save();
       await ApiKeyModel.insertMany([{ projectId: project._id, workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId), name: 'Public Client Key', key: publicKey, type: 'public' }, { projectId: project._id, workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId), name: 'Server Secret Key', key: secretKey, type: 'secret' }]);
-      res.status(201).json({ id: project._id.toString(), name: project.name, domain: project.domain, publicKey, secretKey, status: project.status, aiInsightsEnabled: (project as any).aiInsightsEnabled !== false, healthInsightsEnabled: (project as any).healthInsightsEnabled !== false, workspaceId: decoded.workspaceId, activeVisitors: 0, totalEvents24h: 0, createdAt: project.createdAt });
+      res.status(201).json({ id: project._id.toString(), name: project.name, domain: project.domain, publicKey, secretKey, status: project.status, aiInsightsEnabled: (project as any).aiInsightsEnabled !== false, healthInsightsEnabled: (project as any).healthInsightsEnabled !== false, workspaceId: decoded.workspaceId, seenHosts: (project as any).seenHosts || [], lastEventAt: project.lastEventAt || null, activeVisitors: 0, totalEvents24h: 0, createdAt: project.createdAt });
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
@@ -873,7 +878,7 @@ async function startServer() {
       if (typeof aiInsightsEnabled === 'boolean') (project as any).aiInsightsEnabled = aiInsightsEnabled;
       if (typeof healthInsightsEnabled === 'boolean') (project as any).healthInsightsEnabled = healthInsightsEnabled;
       await project.save();
-      res.json({ id: project._id.toString(), name: project.name, domain: project.domain, status: project.status, publicKey: project.publicKey, secretKey: project.secretKey, aiInsightsEnabled: (project as any).aiInsightsEnabled !== false, healthInsightsEnabled: (project as any).healthInsightsEnabled !== false, workspaceId: project.workspaceId.toString(), activeVisitors: 0, totalEvents24h: 0, createdAt: project.createdAt });
+      res.json({ id: project._id.toString(), name: project.name, domain: project.domain, status: project.status, publicKey: project.publicKey, secretKey: project.secretKey, aiInsightsEnabled: (project as any).aiInsightsEnabled !== false, healthInsightsEnabled: (project as any).healthInsightsEnabled !== false, workspaceId: project.workspaceId.toString(), seenHosts: (project as any).seenHosts || [], lastEventAt: project.lastEventAt || null, activeVisitors: 0, totalEvents24h: 0, createdAt: project.createdAt });
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
@@ -881,8 +886,19 @@ async function startServer() {
     if (!isMongoConnected()) { res.status(503).json({ error: 'Database not connected.' }); return; }
     const decoded = extractJWT(req); if (!decoded) { res.status(401).json({ error: 'Authentication required.' }); return; }
     try {
+      if (!mongoose.Types.ObjectId.isValid(req.params.id)) { res.status(400).json({ error: 'Invalid project id.' }); return; }
       const project = await ProjectModel.findOne({ _id: new mongoose.Types.ObjectId(req.params.id), workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId) });
       if (!project) { res.status(404).json({ error: 'Project not found.' }); return; }
+      if (req.query.permanent === 'true') {
+        await Promise.all([
+          EventModel.deleteMany({ projectId: project._id }),
+          SessionModel.deleteMany({ projectId: project._id }),
+          ApiKeyModel.deleteMany({ projectId: project._id }),
+        ]);
+        await ProjectModel.deleteOne({ _id: project._id });
+        res.json({ success: true, deleted: true });
+        return;
+      }
       (project as any).status = 'archived';
       await project.save();
       res.json({ success: true });

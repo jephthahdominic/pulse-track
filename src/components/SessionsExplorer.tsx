@@ -102,8 +102,8 @@ export const SessionsExplorer: React.FC<SessionsExplorerProps> = ({ sessions, au
     (s) =>
       s.sessionId.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (s.userId && s.userId.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      s.geo.country.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.entryPage.toLowerCase().includes(searchTerm.toLowerCase())
+      (s.geo?.country || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.entryPage || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const pvCount = timeline.filter((e) => e.type === 'pageview').length;
@@ -310,11 +310,11 @@ export const SessionsExplorer: React.FC<SessionsExplorerProps> = ({ sessions, au
                   <td className="py-3">
                     <div className="flex items-center space-x-1.5 text-slate-700 dark:text-slate-300 font-medium">
                       <Globe className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{s.geo.city}, {s.geo.country}</span>
+                      <span>{[s.geo?.city, s.geo?.country].filter(Boolean).join(', ') || 'Unknown location'}</span>
                     </div>
                     <div className="text-[10px] text-slate-400 flex items-center space-x-1 mt-0.5">
-                      {s.device.deviceType === 'mobile' ? <Smartphone className="w-3 h-3" /> : <Laptop className="w-3 h-3" />}
-                      <span>{s.device.browser} ({s.device.os})</span>
+                      {s.device?.deviceType === 'mobile' ? <Smartphone className="w-3 h-3" /> : <Laptop className="w-3 h-3" />}
+                      <span>{s.device?.browser || 'Unknown'} ({s.device?.os || 'Unknown'})</span>
                     </div>
                   </td>
 
@@ -371,7 +371,7 @@ export const SessionsExplorer: React.FC<SessionsExplorerProps> = ({ sessions, au
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">
                   <Globe className="w-3 h-3 inline mr-1 -mt-0.5" />
-                  {selectedSession.geo.city}, {selectedSession.geo.country} · {selectedSession.device.browser} on {selectedSession.device.os}
+                  {[selectedSession.geo?.city, selectedSession.geo?.country].filter(Boolean).join(', ') || 'Unknown location'} · {selectedSession.device?.browser || 'Unknown'} on {selectedSession.device?.os || 'Unknown'}
                   {selectedSession.userId && (
                     <span className="ml-2 text-emerald-600 dark:text-emerald-400">
                       <UserCheck className="w-3 h-3 inline mr-0.5 -mt-0.5" />

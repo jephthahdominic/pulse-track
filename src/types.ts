@@ -34,6 +34,10 @@ export interface Project {
   status: 'active' | 'paused' | 'archived';
   aiInsightsEnabled: boolean;
   healthInsightsEnabled: boolean;
+  /** Last time an SDK event arrived for this project; null until the SDK connects. */
+  lastEventAt?: string | null;
+  /** Hostnames events have actually arrived from. */
+  seenHosts?: string[];
   createdAt: string;
 }
 

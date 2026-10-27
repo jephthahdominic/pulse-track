@@ -10,6 +10,8 @@ export interface IProject extends Document {
   status: 'active' | 'paused' | 'archived';
   aiInsightsEnabled: boolean;
   healthInsightsEnabled: boolean;
+  lastEventAt: Date | null;
+  seenHosts: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,6 +26,8 @@ const ProjectSchema = new Schema<IProject>(
     status: { type: String, enum: ['active', 'paused', 'archived'], default: 'active' },
     aiInsightsEnabled: { type: Boolean, default: true },
     healthInsightsEnabled: { type: Boolean, default: true },
+    lastEventAt: { type: Date, default: null },
+    seenHosts: { type: [String], default: [] },
   },
   { timestamps: true }
 );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HeaderNavbar } from './components/HeaderNavbar';
 import { Sidebar, ActiveTab } from './components/Sidebar';
 import { OverviewDashboard } from './components/OverviewDashboard';
@@ -12,6 +12,7 @@ import { FunnelAnalytics } from './components/FunnelAnalytics';
 import { HeatmapVisualizer } from './components/HeatmapVisualizer';
 import { SupportDesk } from './components/SupportDesk';
 import { SettingsWorkspace } from './components/SettingsWorkspace';
+import { DashboardSkeleton } from './components/DashboardSkeleton';
 import { AdminPanel } from './components/AdminPanel';
 import { DemoSandbox } from './components/DemoSandbox';
 import { DeveloperDocs } from './components/DeveloperDocs';
@@ -39,6 +40,13 @@ import {
 import { db } from './services/db';
 
 const AUTH_TOKEN_KEY = 'pulsetrack_auth_token';
+const PROJECT_PARAM = 'project';
+const TABS: ActiveTab[] = ['overview', 'live', 'sessions', 'users', 'events', 'performance', 'errors', 'funnels', 'heatmaps', 'support', 'settings', 'admin', 'sandbox', 'docs'];
+const tabFromPath = (pathname: string): ActiveTab => {
+  const seg = pathname.replace(/^\/+|\/+$/g, '').split('/')[0];
+  return (TABS as string[]).includes(seg) ? (seg as ActiveTab) : 'overview';
+};
+const pathForTab = (tab: ActiveTab) => (tab === 'overview' ? '/' : `/${tab}`);
 const THEME_MODE_KEY = 'pulsetrack_theme_mode';
 
 export default function App() {
@@ -50,7 +58,7 @@ export default function App() {
     typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)').matches : true
   );
   const darkMode = themeMode === 'system' ? systemDark : themeMode === 'dark';
-  const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => tabFromPath(window.location.pathname));
   const [timeframe, setTimeframe] = useState<Timeframe>('7d');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -99,6 +107,8 @@ export default function App() {
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>(db.userProfiles);
   const [heatmapClicks, setHeatmapClicks] = useState<HeatmapPoint[]>([]);
   const [funnels, setFunnels] = useState<any[]>([]);
+  // Id of the project whose real data has finished its first load (auth mode only)
+  const [loadedProjectId, setLoadedProjectId] = useState<string | null>(null);
 
   // Sync dark mode class on document element + persist preference
   useEffect(() => {
@@ -132,6 +142,9 @@ export default function App() {
         if (status.demoMode) {
           // MongoDB not connected — run in demo mode, skip auth
           setIsAuthRequired(false);
+          const wanted = new URLSearchParams(window.location.search).get(PROJECT_PARAM);
+          const demo = db.projects.find((p) => p.id === wanted);
+          if (demo) setCurrentProject(demo);
           setAuthLoading(false);
           return;
         }
@@ -187,6 +200,7 @@ export default function App() {
     setWorkspaces([ws]);
     setCurrentWorkspace(ws);
 
+    if (data.projects.length === 0) { setProjects([]); setApiKeys([]); }
     if (data.projects.length > 0) {
       const mapProject = (p: any): Project => ({
         id: p.id, workspaceId: p.workspaceId || data.workspace.id,
@@ -195,10 +209,16 @@ export default function App() {
         totalEvents24h: p.totalEvents24h ?? 0,
         aiInsightsEnabled: p.aiInsightsEnabled !== false,
         healthInsightsEnabled: p.healthInsightsEnabled !== false,
+        lastEventAt: p.lastEventAt || null, seenHosts: p.seenHosts || [],
         createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date().toISOString(),
       });
       setProjects(data.projects.map(mapProject));
-      setCurrentProject(mapProject(data.projects[0]));
+      // Restore the project from the URL (?project=<id>) when it still exists
+      const wanted = new URLSearchParams(window.location.search).get(PROJECT_PARAM);
+      const pick = data.projects.find((p: any) => p.id === wanted)
+        || data.projects.find((p: any) => p.status !== 'archived')
+        || data.projects[0];
+      setCurrentProject(mapProject(pick));
     }
 
     if (data.apiKeys.length > 0) {
@@ -233,6 +253,11 @@ export default function App() {
 
   // ── Fetch / Sync data ───────────────────────────────────────────────────────
   const refreshData = async () => {
+    // Wait for the server-mode check, and never query a live database with a demo project id
+    // (real projects have Mongo ObjectIds; a demo id means none are loaded yet or none exist).
+    if (authLoading) return;
+    if (isAuthRequired && !/^[0-9a-f]{24}$/i.test(currentProject.id)) return;
+    const loadingFor = currentProject.id;
     try {
       const params = new URLSearchParams();
       params.set('projectId', currentProject.id);
@@ -259,7 +284,7 @@ export default function App() {
         fetch(`/api/v1/analytics/heatmaps?projectId=${currentProject.id}`, { headers: authHeaders() }),
         fetch(`/api/v1/analytics/funnels?projectId=${currentProject.id}`, { headers: authHeaders() }),
       ]);
-      if (sessRes.status === 'fulfilled' && sessRes.value.ok) { const d = await sessRes.value.json(); setSessions(d.sessions); }
+      if (sessRes.status === 'fulfilled' && sessRes.value.ok) { const d = await sessRes.value.json(); setSessions(d.sessions || []); }
       if (evtRes.status === 'fulfilled' && evtRes.value.ok) { const d = await evtRes.value.json(); setCustomEvents(d.events); }
       if (errRes.status === 'fulfilled' && errRes.value.ok) { const d = await errRes.value.json(); setErrorLogs(d.errors); }
       if (ticketRes.status === 'fulfilled' && ticketRes.value.ok) { const d = await ticketRes.value.json(); setSupportTickets(d.tickets); }
@@ -270,12 +295,50 @@ export default function App() {
       setAdminStats(db.getAdminStats());
     } catch {
       setOverviewStats(db.getOverviewStats(currentProject.id, timeframe, selectedDate || undefined));
+    } finally {
+      setLoadedProjectId(loadingFor);
     }
   };
 
   useEffect(() => {
     refreshData();
-  }, [currentProject.id, timeframe, selectedDate, authToken]);
+  }, [currentProject.id, timeframe, selectedDate, authToken, authLoading, isAuthRequired]);
+
+  const urlSyncedRef = useRef(false);
+
+  // Keep the URL (/<page>?project=<id>) in step with the selected page and project,
+  // so a refresh, a shared link, or back/forward lands on the same view
+  useEffect(() => {
+    if (authLoading) return;
+    const url = new URL(window.location.href);
+    url.pathname = pathForTab(activeTab);
+    if (!isAuthRequired || projects.some((p) => p.id === currentProject.id)) {
+      url.searchParams.set(PROJECT_PARAM, currentProject.id);
+    }
+    if (url.href !== window.location.href) {
+      // First sync only normalises the URL; later changes add history entries for back/forward
+      if (urlSyncedRef.current) window.history.pushState({}, '', url);
+      else window.history.replaceState({}, '', url);
+    }
+    if (!isAuthRequired || projects.some((p) => p.id === currentProject.id)) urlSyncedRef.current = true;
+  }, [authLoading, isAuthRequired, projects, currentProject.id, activeTab]);
+
+  // Browser back/forward: follow the page and project in the URL
+  useEffect(() => {
+    const onPop = () => {
+      setActiveTab(tabFromPath(window.location.pathname));
+      const id = new URLSearchParams(window.location.search).get(PROJECT_PARAM);
+      const target = projects.find((p) => p.id === id);
+      if (target) setCurrentProject(target);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [projects]);
+
+  // Logged in with no real projects: send them to Settings to create one
+  useEffect(() => {
+    if (!authLoading && isAuthRequired && authToken && projects.length === 0) setActiveTab('settings');
+  }, [authLoading, isAuthRequired, authToken, projects.length]);
 
   // Handle live test hit simulation
   const handleSimulatedHit = () => {
@@ -294,6 +357,7 @@ export default function App() {
     totalEvents24h: p.totalEvents24h ?? 0,
     aiInsightsEnabled: p.aiInsightsEnabled !== false,
     healthInsightsEnabled: p.healthInsightsEnabled !== false,
+    lastEventAt: p.lastEventAt || null, seenHosts: p.seenHosts || [],
     createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date().toISOString(),
   });
 
@@ -342,6 +406,37 @@ export default function App() {
     }
   };
 
+  // Keep connection status fresh while the Settings page is open
+  useEffect(() => {
+    if (!isAuthRequired || !authToken || activeTab !== 'settings') return;
+    const tick = async () => {
+      try {
+        const res = await fetch('/api/v1/projects', { headers: authHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        const fresh = new Map<string, Project>((data.projects || []).map((p: any) => [p.id, toProject(p)]));
+        setProjects((prev) => prev.map((p) => fresh.has(p.id) ? { ...p, lastEventAt: fresh.get(p.id)!.lastEventAt, seenHosts: fresh.get(p.id)!.seenHosts } : p));
+      } catch { /* transient; retry next tick */ }
+    };
+    tick();
+    const t = setInterval(tick, 10000);
+    return () => clearInterval(t);
+  }, [isAuthRequired, authToken, activeTab]);
+
+  const handleDeleteProject = async (id: string) => {
+    if (isAuthRequired) {
+      const res = await fetch(`/api/v1/projects/${id}?permanent=true`, { method: 'DELETE', headers: authHeaders() });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed to delete project'); }
+    }
+    const remaining = projects.filter((p) => p.id !== id);
+    setProjects(remaining);
+    setApiKeys((prev) => prev.filter((k) => k.projectId !== id));
+    if (currentProject.id === id) {
+      const next = remaining.find((p) => p.status === 'active') || remaining[0];
+      if (next) setCurrentProject(next);
+    }
+  };
+
   const handleRegenerateKeys = async (projectId: string): Promise<{ publicKey: string; secretKey: string }> => {
     if (!isAuthRequired) {
       const pk = `pk_live_demo_${Math.random().toString(36).slice(2, 10)}`;
@@ -384,6 +479,11 @@ export default function App() {
     );
   }
 
+  // Live mode: hold back the dashboard until the real data for this project has loaded,
+  // so the built-in demo data never flashes first.
+  const showSkeleton = isAuthRequired && !!authToken && activeTab !== 'settings'
+    && projects.length > 0 && loadedProjectId !== currentProject.id;
+
   if (isAuthRequired && !authToken) {
     return <AuthPage onAuthSuccess={handleAuthSuccess} />;
   }
@@ -423,6 +523,7 @@ export default function App() {
 
         {/* Primary View Area */}
         <main className="flex-1 p-3 sm:p-4 lg:p-6 max-w-[1400px] mx-auto min-w-0 overflow-hidden space-y-4">
+          {showSkeleton ? <DashboardSkeleton /> : (<>
           {activeTab === 'overview' && (
             <OverviewDashboard
               stats={overviewStats}
@@ -488,6 +589,7 @@ export default function App() {
               onCreateProject={handleCreateProject}
               onUpdateProject={handleUpdateProject}
               onArchiveProject={handleArchiveProject}
+              onDeleteProject={handleDeleteProject}
               onRegenerateKeys={handleRegenerateKeys}
               onRenameWorkspace={handleRenameWorkspace}
               onSelectProject={(proj) => setCurrentProject(proj)}
@@ -507,6 +609,7 @@ export default function App() {
           {activeTab === 'docs' && (
             <DeveloperDocs />
           )}
+          </>)}
         </main>
       </div>
 

@@ -824,6 +824,7 @@ class AnalyticsDatabase {
 
     // Update project stats counter
     project.totalEvents24h += events.length;
+    project.lastEventAt = new Date().toISOString();
 
     return { success: true, ingested: events.length };
   }
