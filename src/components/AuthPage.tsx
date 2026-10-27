@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Activity, Eye, EyeOff, Loader2, Shield, Zap, BarChart3, Globe } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 
 interface AuthPageProps {
   onAuthSuccess: (token: string, userData: AuthUserData) => void;
@@ -78,64 +78,27 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     }
   };
 
-  const features = [
-    { icon: <BarChart3 className="w-4 h-4" />, label: 'Real-time analytics & visitor tracking' },
-    { icon: <Zap className="w-4 h-4" />, label: 'Core Web Vitals & performance monitoring' },
-    { icon: <Shield className="w-4 h-4" />, label: 'Error monitoring & stack trace capture' },
-    { icon: <Globe className="w-4 h-4" />, label: 'Multi-project workspace management' },
-  ];
-
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-100 flex">
-      {/* Left panel — branding */}
-      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 bg-gradient-to-br from-slate-900 via-[#09090b] to-indigo-950 border-r border-slate-800">
-        <div className="flex items-center space-x-3">
-          <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-            <Activity className="w-5 h-5 text-white" />
-          </div>
-          <span className="text-xl font-bold tracking-tight text-white">PulseTrack</span>
-        </div>
-
-        <div className="space-y-8">
-          <div>
-            <h1 className="text-4xl font-bold text-white leading-tight mb-4">
-              Enterprise-grade<br />
-              <span className="text-indigo-400">website intelligence</span><br />
-              for every team.
-            </h1>
-            <p className="text-slate-400 text-sm leading-relaxed max-w-sm">
-              Install one script. Track visitors, performance, errors, and user behaviour in real time.
-              No configuration required.
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            {features.map((f, i) => (
-              <div key={i} className="flex items-center space-x-3 text-sm">
-                <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 flex-shrink-0">
-                  {f.icon}
-                </div>
-                <span className="text-slate-300">{f.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-2 text-xs text-slate-600">
-          <Shield className="w-3.5 h-3.5" />
-          <span>SOC 2 ready · GDPR compliant · 99.9% uptime SLA</span>
-        </div>
+      {/* Left panel — branding image */}
+      <div className="hidden lg:block lg:w-1/2 relative overflow-hidden border-r border-slate-800 bg-gradient-to-b from-[#f4f7fc] to-[#cacfd5]">
+        {/* Whole image stays visible at any panel shape; its top/bottom edges fade into the panel colour */}
+        <img
+          src="/brand.jpg"
+          alt="PulseTrack — Website monitoring center and dashboard"
+          className="absolute inset-0 m-auto max-w-full max-h-full w-auto h-auto"
+          style={{ WebkitMaskImage: 'linear-gradient(to bottom, transparent, #000 5%, #000 95%, transparent)', maskImage: 'linear-gradient(to bottom, transparent, #000 5%, #000 95%, transparent)' }}
+          fetchPriority="high"
+        />
       </div>
 
       {/* Right panel — auth form */}
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-sm space-y-6">
-          {/* Mobile logo */}
-          <div className="flex lg:hidden items-center space-x-3 mb-8">
-            <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center">
-              <Activity className="w-4 h-4 text-white" />
-            </div>
-            <span className="text-lg font-bold text-white">PulseTrack</span>
+          {/* Logo + brand banner (the side panel is desktop-only) */}
+          <div className="lg:hidden space-y-4 mb-6">
+            <img src="/logo-dark.png" alt="PulseTrack" width={160} height={34} className="h-8 w-auto" />
+            <img src="/brand.jpg" alt="" aria-hidden className="w-full h-32 sm:h-44 rounded-xl object-cover object-[50%_72%] border border-slate-800" loading="lazy" />
           </div>
 
           {/* Header */}

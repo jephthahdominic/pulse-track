@@ -84,10 +84,10 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, maxDate
         onClick={() => setOpen((v) => !v)}
         title="Pick a specific date"
         aria-expanded={open}
-        className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium border transition-all cursor-pointer ${
+        className={`flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
           value
-            ? 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border-indigo-500/30'
-            : 'bg-slate-100 dark:bg-zinc-800/80 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 border-slate-200 dark:border-zinc-700'
+            ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+            : 'bg-slate-100/70 dark:bg-white/[0.05] hover:bg-slate-100 dark:hover:bg-white/[0.08] text-slate-700 dark:text-zinc-200'
         }`}
       >
         <CalendarDays className="w-3.5 h-3.5 shrink-0" />

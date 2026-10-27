@@ -21,12 +21,12 @@ interface PeriodSelectProps {
 /** Compact period dropdown shared by the header and the mobile filter strip. */
 export const PeriodSelect: React.FC<PeriodSelectProps> = ({ timeframe, hasCustomDate = false, onChange, className = '' }) => (
   <label className={`relative inline-flex items-center ${className}`}>
-    <CalendarClock className="absolute left-2.5 w-3.5 h-3.5 text-blue-500 pointer-events-none" />
+    <CalendarClock className="absolute left-2.5 w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 pointer-events-none" />
     <select
       aria-label="Time period"
       value={hasCustomDate ? 'custom' : timeframe}
       onChange={(e) => { if (e.target.value !== 'custom') onChange(e.target.value as Timeframe); }}
-      className="appearance-none cursor-pointer h-8 pl-8 pr-7 rounded text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-slate-800 dark:text-zinc-200 border border-slate-200/80 dark:border-zinc-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      className="appearance-none cursor-pointer h-8 pl-8 pr-7 rounded-lg text-xs font-medium bg-slate-100/70 hover:bg-slate-100 dark:bg-white/[0.05] dark:hover:bg-white/[0.08] text-slate-700 dark:text-zinc-200 border-0 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
     >
       {hasCustomDate && <option value="custom">Custom day</option>}
       {PERIOD_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}

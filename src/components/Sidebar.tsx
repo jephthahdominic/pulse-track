@@ -119,200 +119,105 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, openTi
     { id: 'admin' as ActiveTab, label: 'Platform Admin', icon: ShieldAlert },
   ];
 
-  const renderContent = () => (
-    <>
-      <div className="p-3 space-y-4">
-        {/* Sidebar Controls (Pin / Expand / Collapse Toggle / Close on mobile) */}
-        <div
-          className={`flex items-center pb-2 border-b border-slate-200/80 dark:border-zinc-800/80 ${
-            effectiveCollapsed ? 'justify-center' : 'justify-between px-1'
+  const renderNavItem = (item: { id: ActiveTab; label: string; icon: React.ComponentType<{ className?: string; strokeWidth?: number }>; badge?: string; count?: number; highlight?: boolean }) => {
+    const Icon = item.icon;
+    const isActive = activeTab === item.id;
+    const isErrors = item.id === 'errors';
+    return (
+      <div key={item.id} className="relative group">
+        {isActive && !effectiveCollapsed && <span className="absolute -left-3 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-emerald-500" />}
+        <button
+          onClick={() => selectTab(item.id)}
+          aria-current={isActive ? 'page' : undefined}
+          className={`w-full flex items-center rounded-lg text-[13px] font-medium transition-colors ${
+            effectiveCollapsed ? 'justify-center h-10' : 'gap-3 px-3 h-9'
+          } ${
+            isActive
+              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+              : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 hover:bg-slate-100 dark:hover:bg-white/[0.05]'
           }`}
         >
-          {!effectiveCollapsed && (
-            <div className="flex items-center space-x-1.5 text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider">
-              <span>Navigation</span>
-            </div>
+          <Icon strokeWidth={1.75} className={`w-[18px] h-[18px] shrink-0 ${isActive ? 'text-emerald-600 dark:text-emerald-400' : item.highlight ? 'text-emerald-600 dark:text-emerald-400' : ''}`} />
+          {!effectiveCollapsed && <span className="truncate flex-1 text-left">{item.label}</span>}
+
+          {!effectiveCollapsed && item.badge && (
+            <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />{item.badge}
+            </span>
           )}
+          {!effectiveCollapsed && item.count ? (
+            <span className={`text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded-md ${
+              isErrors ? 'bg-red-500/10 text-red-600 dark:text-red-400' : 'bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-zinc-400'
+            }`}>{item.count}</span>
+          ) : null}
 
-          <div className="flex items-center space-x-1">
-            {!isMobile && (
-              <button
-                onClick={togglePin}
-                title={isPinned ? 'Unpin sidebar (allow auto-collapse for chart space)' : 'Pin sidebar (keep expanded)'}
-                className={`p-1.5 rounded transition-all cursor-pointer ${
-                  isPinned
-                    ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/25'
-                    : 'text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-800'
-                }`}
-              >
-                {isPinned ? <Pin className="w-3.5 h-3.5 fill-indigo-500/30" /> : <PinOff className="w-3.5 h-3.5" />}
-              </button>
-            )}
+          {effectiveCollapsed && item.badge && <span className="absolute top-2 right-3 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+          {effectiveCollapsed && item.count ? <span className={`absolute top-2 right-3 w-1.5 h-1.5 rounded-full ${isErrors ? 'bg-red-500' : 'bg-slate-400'}`} /> : null}
+        </button>
 
-            {isMobile ? (
-              <button
-                onClick={() => onCloseMobile?.()}
-                title="Close navigation"
-                aria-label="Close navigation"
-                className="p-1.5 rounded text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-800 transition-all cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                onClick={toggleCollapse}
-                title={effectiveCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
-                className="p-1.5 rounded text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-800 transition-all cursor-pointer"
-              >
-                {effectiveCollapsed ? <PanelLeftOpen className="w-3.5 h-3.5" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
-              </button>
-            )}
+        {effectiveCollapsed && (
+          <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-2.5 py-1.5 bg-slate-900 dark:bg-zinc-800 text-white text-xs rounded-lg shadow-lg pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 whitespace-nowrap">
+            {item.label}{item.badge ? ` · ${item.badge}` : ''}
           </div>
+        )}
+      </div>
+    );
+  };
+
+  const iconButton = 'w-7 h-7 flex items-center justify-center rounded-md text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer';
+
+  const renderContent = () => (
+    <>
+      <div className="p-3 space-y-6">
+        {/* Quiet controls: pin / collapse on desktop, close on mobile */}
+        <div className={`flex items-center ${effectiveCollapsed ? 'justify-center' : 'justify-end'} gap-0.5`}>
+          {!isMobile && !effectiveCollapsed && (
+            <button
+              onClick={togglePin}
+              title={isPinned ? 'Unpin sidebar (auto-collapse for chart space)' : 'Pin sidebar open'}
+              aria-label={isPinned ? 'Unpin sidebar' : 'Pin sidebar'}
+              className={`${iconButton} ${isPinned ? '!text-emerald-600 dark:!text-emerald-400' : ''}`}
+            >
+              {isPinned ? <Pin className="w-3.5 h-3.5" /> : <PinOff className="w-3.5 h-3.5" />}
+            </button>
+          )}
+          {isMobile ? (
+            <button onClick={() => onCloseMobile?.()} title="Close navigation" aria-label="Close navigation" className={iconButton}>
+              <X className="w-4 h-4" />
+            </button>
+          ) : (
+            <button
+              onClick={toggleCollapse}
+              title={effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-label={effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              className={iconButton}
+            >
+              {effectiveCollapsed ? <PanelLeftOpen className="w-3.5 h-3.5" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
+            </button>
+          )}
         </div>
 
-        {/* Main Analytics Section */}
         <div>
-          {!effectiveCollapsed && (
-            <div className="px-2 mb-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-zinc-500 font-bold">
-              Analytics
-            </div>
-          )}
-          <nav className="space-y-1">
-            {mainNavItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              return (
-                <div key={item.id} className="relative group">
-                  <button
-                    onClick={() => selectTab(item.id)}
-                    className={`w-full flex items-center rounded text-xs font-medium transition-all ${
-                      effectiveCollapsed ? 'justify-center py-2 px-0' : 'justify-between px-2 py-1.5'
-                    } ${
-                      isActive
-                        ? 'bg-slate-200 dark:bg-zinc-800 text-slate-900 dark:text-blue-400'
-                        : 'text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-900'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 truncate">
-                      {isActive ? (
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
-                      ) : (
-                        <Icon className="w-4 h-4 text-slate-400 dark:text-zinc-500 shrink-0" />
-                      )}
-                      {!effectiveCollapsed && <span className="truncate">{item.label}</span>}
-                    </div>
-
-                    {!effectiveCollapsed && (
-                      <div className="flex items-center gap-1">
-                        {item.badge && (
-                          <span className="text-[10px] bg-green-500/10 text-green-500 border border-green-500/20 px-1.5 py-0.5 rounded-full font-bold">
-                            {item.badge}
-                          </span>
-                        )}
-                        {item.count && (
-                          <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
-                              item.id === 'errors'
-                                ? 'bg-red-900/30 text-red-400'
-                                : isActive
-                                ? 'bg-zinc-700 text-zinc-100'
-                                : 'bg-slate-200 dark:bg-zinc-800/80 text-slate-600 dark:text-zinc-400'
-                            }`}
-                          >
-                            {item.count}
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Compact Badge Dot when collapsed */}
-                    {effectiveCollapsed && item.badge && (
-                      <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    )}
-                    {effectiveCollapsed && item.count && (
-                      <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-red-500" />
-                    )}
-                  </button>
-
-                  {/* Tooltip on Collapsed Hover */}
-                  {effectiveCollapsed && (
-                    <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1 bg-slate-900 dark:bg-zinc-800 text-white text-xs rounded-md shadow-lg pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 whitespace-nowrap flex items-center space-x-1.5">
-                      <span>{item.label}</span>
-                      {item.badge && (
-                        <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1 rounded font-bold">
-                          {item.badge}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </nav>
+          {!effectiveCollapsed && <div className="px-3 mb-2 text-[10px] uppercase tracking-[0.08em] text-slate-400 dark:text-zinc-500 font-medium">Analytics</div>}
+          <nav className="space-y-0.5">{mainNavItems.map(renderNavItem)}</nav>
         </div>
 
-        {/* System & Management Section */}
         <div>
-          {!effectiveCollapsed && (
-            <div className="px-2 mb-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-zinc-500 font-bold">
-              Management
-            </div>
-          )}
-          <nav className="space-y-1">
-            {secondaryNavItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              return (
-                <div key={item.id} className="relative group">
-                  <button
-                    onClick={() => selectTab(item.id)}
-                    className={`w-full flex items-center rounded text-xs font-medium transition-all ${
-                      effectiveCollapsed ? 'justify-center py-2 px-0' : 'justify-between px-2 py-1.5'
-                    } ${
-                      isActive
-                        ? 'bg-slate-200 dark:bg-zinc-800 text-slate-900 dark:text-blue-400'
-                        : item.highlight
-                        ? 'text-blue-600 dark:text-blue-400 bg-blue-500/10 hover:bg-blue-500/20'
-                        : 'text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-900'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 truncate">
-                      {isActive ? (
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
-                      ) : (
-                        <Icon className={`w-4 h-4 shrink-0 ${item.highlight ? 'text-blue-400' : 'text-slate-400 dark:text-zinc-500'}`} />
-                      )}
-                      {!effectiveCollapsed && <span className="truncate">{item.label}</span>}
-                    </div>
-                  </button>
-
-                  {/* Tooltip on Collapsed Hover */}
-                  {effectiveCollapsed && (
-                    <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1 bg-slate-900 dark:bg-zinc-800 text-white text-xs rounded-md shadow-lg pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 whitespace-nowrap">
-                      {item.label}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </nav>
+          {!effectiveCollapsed && <div className="px-3 mb-2 text-[10px] uppercase tracking-[0.08em] text-slate-400 dark:text-zinc-500 font-medium">Manage</div>}
+          <nav className="space-y-0.5">{secondaryNavItems.map(renderNavItem)}</nav>
         </div>
       </div>
 
-      {/* Footer User Profile Box */}
-      <div className="p-3 border-t border-slate-200 dark:border-zinc-800">
-        <div
-          className={`flex items-center rounded bg-slate-100 dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 transition-all ${
-            effectiveCollapsed ? 'justify-center p-1.5' : 'gap-2 p-2'
-          }`}
-        >
-          <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 shrink-0 flex items-center justify-center text-[10px] text-white font-bold shadow-xs">
+      {/* Account */}
+      <div className="p-3">
+        <div className={`flex items-center rounded-lg hover:bg-slate-100 dark:hover:bg-white/[0.05] transition-colors ${effectiveCollapsed ? 'justify-center p-1.5' : 'gap-2.5 p-2'}`}>
+          <div className="w-8 h-8 rounded-full bg-[#0b1a38] ring-1 ring-black/5 dark:ring-white/10 shrink-0 flex items-center justify-center text-[10px] text-white font-semibold tracking-wide">
             {user.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '').join('') || 'U'}
           </div>
           {!effectiveCollapsed && (
-            <div className="flex-1 overflow-hidden">
-              <div className="text-[10px] font-bold text-slate-800 dark:text-zinc-200 truncate">{user.name}</div>
-              <div className="text-[9px] text-slate-500 dark:text-zinc-500 truncate">{user.email}</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-medium text-slate-800 dark:text-zinc-200 truncate">{user.name}</div>
+              <div className="text-[11px] text-slate-400 dark:text-zinc-500 truncate">{user.email}</div>
             </div>
           )}
         </div>
@@ -326,8 +231,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, openTi
       <aside
         onMouseEnter={() => !isPinned && setIsHovered(true)}
         onMouseLeave={() => !isPinned && setIsHovered(false)}
-        className={`sticky top-14 self-start h-[calc(100vh-3.5rem)] overflow-y-auto border-r border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-[#09090b] flex flex-col justify-between shrink-0 hidden md:flex transition-all duration-300 ease-in-out z-20 ${
-          effectiveCollapsed ? 'w-16' : 'w-56'
+        className={`sticky top-14 self-start h-[calc(100vh-3.5rem)] overflow-y-auto border-r border-slate-200/70 dark:border-white/[0.06] bg-white dark:bg-[#09090b] flex flex-col justify-between shrink-0 hidden md:flex transition-all duration-300 ease-in-out z-20 ${
+          effectiveCollapsed ? 'w-[68px]' : 'w-60'
         }`}
       >
         {renderContent()}
@@ -344,7 +249,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab, openTi
 
       {/* Mobile drawer sidebar */}
       <aside
-        className={`md:hidden fixed inset-y-0 left-0 z-50 w-64 bg-slate-50 dark:bg-[#09090b] border-r border-slate-200 dark:border-zinc-800 flex flex-col justify-between overflow-y-auto transition-transform duration-300 ease-in-out ${
+        className={`md:hidden fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-[#09090b] border-r border-slate-200/70 dark:border-white/[0.06] flex flex-col justify-between overflow-y-auto transition-transform duration-300 ease-in-out ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'
         }`}
         aria-label="Mobile navigation"
