@@ -18,14 +18,15 @@ interface SettingsWorkspaceProps {
   onUpdateProject: (id: string, updates: { name?: string; domain?: string; status?: string; aiInsightsEnabled?: boolean; healthInsightsEnabled?: boolean }) => Promise<void>;
   onArchiveProject: (id: string) => Promise<void>;
   onDeleteProject: (id: string) => Promise<void>;
-  onRegenerateKeys: (projectId: string) => Promise<{ publicKey: string; secretKey: string }>;
+  onCreateApiKey: (projectId: string, name: string, type: 'public' | 'secret') => Promise<ApiKey>;
+  onRevokeApiKey: (id: string) => Promise<void>;
   onRenameWorkspace: (name: string) => Promise<void>;
   onSelectProject: (project: Project) => void;
   themeMode: ThemeMode;
   onSetThemeMode: (mode: ThemeMode) => void;
 }
 
-type Tab = 'projects' | 'apikeys' | 'workspace' | 'billing';
+type Tab = 'apikeys' | 'workspace' | 'billing';
 
 const statusColors: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400',
@@ -38,12 +39,11 @@ const isConnected = (p: Project) => !!p.lastEventAt;
 export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
   workspace, projects, currentProject, apiKeys,
   authToken, isMongoMode,
-  onCreateProject, onUpdateProject, onArchiveProject, onDeleteProject, onRegenerateKeys, onRenameWorkspace, onSelectProject,
+  onCreateProject, onUpdateProject, onArchiveProject, onDeleteProject, onCreateApiKey, onRevokeApiKey, onRenameWorkspace, onSelectProject,
   themeMode, onSetThemeMode,
 }) => {
-  const [activeTab, setActiveTab] = useState<Tab>('projects');
+  const [activeTab, setActiveTab] = useState<Tab>('apikeys');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [revealSecret, setRevealSecret] = useState(false);
 
   // New project form
   const [showNewProject, setShowNewProject] = useState(false);
@@ -82,18 +82,26 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
     }
   };
 
-  // Regenerate keys
-  const [regenConfirmId, setRegenConfirmId] = useState<string | null>(null);
-  const [regenLoading, setRegenLoading] = useState(false);
+  // API keys: create form, one-time reveal of a new key, revoke confirm, per-key setup snippet
+  const [showNewKey, setShowNewKey] = useState(false);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [newKeyType, setNewKeyType] = useState<'public' | 'secret'>('public');
+  const [newKeyLoading, setNewKeyLoading] = useState(false);
+  const [newKeyError, setNewKeyError] = useState('');
+  const [justCreatedId, setJustCreatedId] = useState<string | null>(null);
+  const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
+  const [revokeConfirmId, setRevokeConfirmId] = useState<string | null>(null);
+  const [revokeLoading, setRevokeLoading] = useState(false);
+  const [setupKeyId, setSetupKeyId] = useState<string | null>(null);
 
   // Workspace rename
   const [wsName, setWsName] = useState(workspace.name);
   const [wsNameLoading, setWsNameLoading] = useState(false);
   const [wsNameSaved, setWsNameSaved] = useState(false);
 
-  // Selected project for API keys tab (default to current)
-  const [keysProjectId, setKeysProjectId] = useState(currentProject.id);
-  const keysProject = projects.find((p) => p.id === keysProjectId) || currentProject;
+  // Project detail page (null = project list)
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const detail = projects.find((p) => p.id === detailId) || null;
 
   const usagePercent = Math.min(100, Math.round((workspace.eventsUsed / workspace.eventQuota) * 100));
 
@@ -111,7 +119,7 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
       const proj = await onCreateProject(newName.trim(), newDomain.trim());
       onSelectProject(proj);
       setShowNewProject(false); setNewName(''); setNewDomain('');
-      setActiveTab('apikeys'); setKeysProjectId(proj.id);
+      setDetailId(proj.id);
     } catch (e: any) { setCreateError(e.message || 'Failed to create project.'); }
     finally { setCreateLoading(false); }
   };
@@ -143,18 +151,31 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
     setDeleteLoading(true); setDeleteError('');
     try {
       await onDeleteProject(id);
-      if (keysProjectId === id) setKeysProjectId(currentProject.id);
+      if (detailId === id) setDetailId(null);
       cancelDelete();
     } catch (e: any) { setDeleteError(e.message || 'Failed to delete project.'); }
     finally { setDeleteLoading(false); }
   };
 
-  // ── Regenerate Keys ────────────────────────────────────────────────────────
-  const handleRegen = async (id: string) => {
-    setRegenLoading(true);
-    try { await onRegenerateKeys(id); }
-    finally { setRegenLoading(false); setRegenConfirmId(null); }
+  // ── API keys ───────────────────────────────────────────────────────────────
+  const openNewKey = () => { setNewKeyName(''); setNewKeyType('public'); setNewKeyError(''); setShowNewKey(true); };
+  const handleCreateKey = async (projectId: string) => {
+    if (!newKeyName.trim()) { setNewKeyError('Give the key a name.'); return; }
+    setNewKeyLoading(true); setNewKeyError('');
+    try {
+      const k = await onCreateApiKey(projectId, newKeyName.trim(), newKeyType);
+      setJustCreatedId(k.id); setShowNewKey(false);
+      if (k.type === 'public') setSetupKeyId(k.id);
+    } catch (e: any) { setNewKeyError(e.message || 'Failed to create key.'); }
+    finally { setNewKeyLoading(false); }
   };
+  const handleRevokeKey = async (id: string) => {
+    setRevokeLoading(true);
+    try { await onRevokeApiKey(id); if (setupKeyId === id) setSetupKeyId(null); }
+    finally { setRevokeLoading(false); setRevokeConfirmId(null); }
+  };
+  const toggleReveal = (id: string) => setRevealedKeys((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const snippetFor = (key: string) => `<script src="${window.location.origin}/tracker.min.js" data-key="${key}" async></script>`;
 
   // ── Rename Workspace ───────────────────────────────────────────────────────
   const handleRenameWs = async () => {
@@ -165,8 +186,7 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
   };
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'projects', label: 'Projects' },
-    { id: 'apikeys', label: 'API Keys' },
+    { id: 'apikeys', label: 'Projects & API Keys' },
     { id: 'workspace', label: 'Workspace' },
     { id: 'billing', label: 'Billing' },
   ];
@@ -201,16 +221,22 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
         ))}
       </div>
 
-      {/* ── Projects Tab ─────────────────────────────────────────────────────── */}
-      {activeTab === 'projects' && (
+      {/* ── API Keys tab: project list ─────────────────────────────────────────── */}
+      {activeTab === 'apikeys' && !detail && (
         <div className="space-y-4">
-          {/* New project trigger */}
-          {!showNewProject ? (
-            <button onClick={() => setShowNewProject(true)}
-              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400 text-xs font-medium transition-all w-full">
-              <Plus className="w-4 h-4" /> <span>Add New Project</span>
-            </button>
-          ) : (
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400">
+              {projects.filter(isConnected).length} of {projects.length} connected
+            </span>
+            {!showNewProject && (
+              <button onClick={() => setShowNewProject(true)}
+                className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5">
+                <Plus className="w-3.5 h-3.5" /> New project
+              </button>
+            )}
+          </div>
+
+          {showNewProject && (
             <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-900 dark:text-white">New Project</span>
@@ -237,11 +263,54 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
             </div>
           )}
 
-          {/* Projects list */}
-          {projects.map((p) => (
-            <div key={p.id} className={`p-4 rounded-2xl bg-white dark:bg-slate-900 border ${p.id === currentProject.id ? 'border-indigo-300 dark:border-indigo-700' : 'border-slate-200 dark:border-slate-800'} shadow-sm`}>
+          {projects.length === 0 && !showNewProject && (
+            <p className="text-xs text-slate-500 py-8 text-center">No projects yet. Create one to start tracking a website.</p>
+          )}
+
+          <div className="space-y-2">
+            {projects.map((p) => (
+              <button key={p.id} onClick={() => setDetailId(p.id)}
+                className={`w-full text-left p-4 rounded-2xl bg-white dark:bg-slate-900 border ${p.id === currentProject.id ? 'border-indigo-300 dark:border-indigo-700' : 'border-slate-200 dark:border-slate-800'} shadow-sm hover:border-indigo-400 transition-colors flex items-center justify-between gap-3 flex-wrap`}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-slate-100 dark:bg-slate-800">
+                    <Globe className="w-4 h-4 text-slate-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-slate-900 dark:text-white truncate">{p.name}</span>
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${statusColors[p.status] || statusColors.active}`}>{p.status}</span>
+                    </div>
+                    <span className="text-xs text-slate-500 truncate block">{p.domain} · {apiKeys.filter((k) => k.projectId === p.id).length} key(s)</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  {isConnected(p) ? (
+                    <span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="w-3.5 h-3.5" /> Connected</span>
+                  ) : (
+                    <span className="text-xs text-slate-400">Not connected yet</span>
+                  )}
+                  <ChevronRight className="w-4 h-4 text-slate-300" />
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── API Keys tab: project detail ───────────────────────────────────────── */}
+      {activeTab === 'apikeys' && detail && (() => {
+        const p = detail;
+        const keys = apiKeys.filter((k) => k.projectId === p.id);
+        const archived = p.status === 'archived';
+        return (
+          <div className="space-y-4">
+            <button onClick={() => setDetailId(null)} className="text-xs font-medium text-slate-500 hover:text-indigo-600 flex items-center gap-1">
+              <ChevronRight className="w-3 h-3 rotate-180" /> All projects
+            </button>
+
+            {/* Overview + controls */}
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
               {editingId === p.id ? (
-                /* Edit mode */
                 <div className="space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1">
@@ -261,16 +330,58 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
                     </button>
                   </div>
                 </div>
-              ) : deleteConfirmId === p.id ? (
-                /* Permanent delete confirm */
-                <div className="space-y-3">
+              ) : (
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white truncate">{p.name}</h3>
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${statusColors[p.status] || statusColors.active}`}>{p.status}</span>
+                      {p.id === currentProject.id && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-400">VIEWING</span>}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">{p.domain}</p>
+                  </div>
+                  {deleteConfirmId !== p.id && archiveConfirmId !== p.id && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {p.id !== currentProject.id && !archived && (
+                        <button onClick={() => onSelectProject(p)} className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium">View data</button>
+                      )}
+                      {!archived && (
+                        <>
+                          <button onClick={() => startEdit(p)} className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium flex items-center gap-1"><Pencil className="w-3 h-3" /> Edit</button>
+                          <button onClick={() => toggleStatus(p)} className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 ${p.status === 'active' ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400'}`}>
+                            {p.status === 'active' ? <><Pause className="w-3 h-3" /> Pause</> : <><Play className="w-3 h-3" /> Resume</>}
+                          </button>
+                          <button onClick={() => setArchiveConfirmId(p.id)} className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-600 dark:text-slate-300 text-xs font-medium flex items-center gap-1"><Archive className="w-3 h-3" /> Archive</button>
+                        </>
+                      )}
+                      {archived && (
+                        <button onClick={() => onUpdateProject(p.id, { status: 'active' })} className="px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 text-xs font-medium flex items-center gap-1"><Play className="w-3 h-3" /> Restore</button>
+                      )}
+                      <button onClick={() => { setDeleteConfirmId(p.id); setDeleteInput(''); setDeleteError(''); }} className="px-2.5 py-1.5 rounded-lg bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-950/70 text-red-600 dark:text-red-400 text-xs font-medium flex items-center gap-1"><Trash2 className="w-3 h-3" /> Delete</button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {archiveConfirmId === p.id && (
+                <div className="flex items-center justify-between gap-3 flex-wrap p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                  <p className="text-xs text-slate-700 dark:text-slate-300">Archive <strong>{p.name}</strong>? Tracking will stop and data is preserved.</p>
+                  <div className="flex gap-2">
+                    <button onClick={() => setArchiveConfirmId(null)} className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700">Cancel</button>
+                    <button onClick={() => confirmArchive(p.id)} className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold">Archive</button>
+                  </div>
+                </div>
+              )}
+
+              {deleteConfirmId === p.id && (
+                <div className="space-y-3 p-3 rounded-xl bg-red-50/60 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50">
                   <p className="text-xs text-slate-700 dark:text-slate-300">
                     <strong className="text-red-600 dark:text-red-400">Permanently delete {p.name}?</strong> This removes the project, its API keys, and all of its events and sessions. This cannot be undone.
                   </p>
                   <div className="space-y-1">
                     <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Type <span className="font-mono normal-case">{p.name}</span> to confirm</label>
                     <input value={deleteInput} onChange={(e) => setDeleteInput(e.target.value)} autoFocus
-                      className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-red-500 text-slate-900 dark:text-white" />
+                      className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-red-500 text-slate-900 dark:text-white" />
                   </div>
                   {deleteError && <p className="text-xs text-red-500">{deleteError}</p>}
                   <div className="flex justify-end gap-2">
@@ -281,254 +392,19 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
                     </button>
                   </div>
                 </div>
-              ) : archiveConfirmId === p.id ? (
-                /* Archive confirm */
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-slate-700 dark:text-slate-300">Archive <strong>{p.name}</strong>? Tracking will stop and data is preserved.</p>
-                  <div className="flex gap-2">
-                    <button onClick={() => setArchiveConfirmId(null)} className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700">Cancel</button>
-                    <button onClick={() => confirmArchive(p.id)} className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold">Archive</button>
-                  </div>
-                </div>
-              ) : (
-                /* Normal view */
-                <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${p.id === currentProject.id ? 'bg-indigo-100 dark:bg-indigo-950/60' : 'bg-slate-100 dark:bg-slate-800'}`}>
-                      <Globe className={`w-4 h-4 ${p.id === currentProject.id ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-slate-900 dark:text-white truncate">{p.name}</span>
-                        {p.id === currentProject.id && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-400">ACTIVE</span>}
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs text-slate-500 truncate">{p.domain}</span>
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${statusColors[p.status] || statusColors.active}`}>{p.status}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    {p.id !== currentProject.id && p.status !== 'archived' && (
-                      <button onClick={() => onSelectProject(p)} className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium flex items-center gap-1">
-                        View <ChevronRight className="w-3 h-3" />
-                      </button>
-                    )}
-                    <button onClick={() => { setKeysProjectId(p.id); setActiveTab('apikeys'); }}
-                      title="Manage API Keys"
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors">
-                      <Key className="w-3.5 h-3.5" />
-                    </button>
-                    {p.status !== 'archived' && (
-                      <>
-                        <button onClick={() => startEdit(p)} title="Edit"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => toggleStatus(p)} title={p.status === 'active' ? 'Pause tracking' : 'Resume tracking'}
-                          className={`p-1.5 rounded-lg transition-colors ${p.status === 'active' ? 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/40' : 'text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'}`}>
-                          {p.status === 'active' ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                        </button>
-                        <button onClick={() => setArchiveConfirmId(p.id)} title="Archive project"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors">
-                          <Archive className="w-3.5 h-3.5" />
-                        </button>
-                      </>
-                    )}
-                    <button onClick={() => { setDeleteConfirmId(p.id); setDeleteInput(''); setDeleteError(''); }} title="Delete project permanently"
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
               )}
 
-              {/* AI & Insights feature toggles */}
-              {p.status !== 'archived' && (
-                <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <button
-                    onClick={() => toggleFeature(p, 'aiInsightsEnabled')}
-                    disabled={featureLoadingId === p.id}
-                    title={p.aiInsightsEnabled ? 'Disable AI Insights for this project' : 'Enable AI Insights for this project'}
-                    className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-left transition-colors hover:border-indigo-300 dark:hover:border-indigo-700 cursor-pointer disabled:opacity-60"
-                  >
-                    <span className="flex items-center gap-2 min-w-0">
-                      <Sparkles className={`w-3.5 h-3.5 shrink-0 ${p.aiInsightsEnabled ? 'text-indigo-500' : 'text-slate-400'}`} />
-                      <span className="min-w-0">
-                        <span className="block text-xs font-semibold text-slate-700 dark:text-slate-200">AI Insights</span>
-                        <span className="block text-[10px] text-slate-400">Gemini diagnostics &amp; smart analysis</span>
-                      </span>
-                    </span>
-                    {featureLoadingId === p.id ? (
-                      <Loader2 className="w-4 h-4 text-indigo-500 animate-spin shrink-0" />
-                    ) : (
-                      <span className={`relative inline-flex items-center h-5 w-9 rounded-full transition-colors shrink-0 ${p.aiInsightsEnabled ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
-                        <span className={`inline-block w-3.5 h-3.5 transform rounded-full bg-white transition-transform ${p.aiInsightsEnabled ? 'translate-x-[18px]' : 'translate-x-1'}`} />
-                      </span>
-                    )}
-                  </button>
-
-                  <button
-                    onClick={() => toggleFeature(p, 'healthInsightsEnabled')}
-                    disabled={featureLoadingId === p.id}
-                    title={p.healthInsightsEnabled ? 'Disable Health Insights for this project' : 'Enable Health Insights for this project'}
-                    className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-left transition-colors hover:border-indigo-300 dark:hover:border-indigo-700 cursor-pointer disabled:opacity-60"
-                  >
-                    <span className="flex items-center gap-2 min-w-0">
-                      <HeartPulse className={`w-3.5 h-3.5 shrink-0 ${p.healthInsightsEnabled ? 'text-emerald-500' : 'text-slate-400'}`} />
-                      <span className="min-w-0">
-                        <span className="block text-xs font-semibold text-slate-700 dark:text-slate-200">Health Insights</span>
-                        <span className="block text-[10px] text-slate-400">Core Web Vitals health score</span>
-                      </span>
-                    </span>
-                    {featureLoadingId === p.id ? (
-                      <Loader2 className="w-4 h-4 text-emerald-500 animate-spin shrink-0" />
-                    ) : (
-                      <span className={`relative inline-flex items-center h-5 w-9 rounded-full transition-colors shrink-0 ${p.healthInsightsEnabled ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
-                        <span className={`inline-block w-3.5 h-3.5 transform rounded-full bg-white transition-transform ${p.healthInsightsEnabled ? 'translate-x-[18px]' : 'translate-x-1'}`} />
-                      </span>
-                    )}
-                  </button>
-                </div>
-              )}
-
-              {/* Embed script snippet */}
-              {p.status !== 'archived' && editingId !== p.id && archiveConfirmId !== p.id && deleteConfirmId !== p.id && (
-                <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <Code2 className="w-3 h-3 text-slate-400" />
-                    <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Embed Script</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 text-[10px] font-mono text-cyan-400 bg-slate-950 rounded-lg px-3 py-2 truncate border border-slate-800">
-                      {`<script src="${window.location.origin}/tracker.min.js" data-key="${p.publicKey}" async></script>`}
-                    </code>
-                    <button onClick={() => copy(`<script src="${window.location.origin}/tracker.min.js" data-key="${p.publicKey}" async></script>`, `embed-${p.id}`)}
-                      className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors flex-shrink-0">
-                      {copiedKey === `embed-${p.id}` ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* ── API Keys Tab ──────────────────────────────────────────────────────── */}
-      {activeTab === 'apikeys' && (
-        <div className="space-y-4">
-          {/* Project selector */}
-          {projects.length > 1 && (
-            <div className="flex items-center gap-2 flex-wrap">
-              {projects.filter((p) => p.status !== 'archived').map((p) => (
-                <button key={p.id} onClick={() => setKeysProjectId(p.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${keysProjectId === p.id ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Key className="w-4 h-4 text-indigo-500" /> API Keys — {keysProject.name}
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Use these credentials to initialise the PulseTrack SDK</p>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  {keysProject.domain} · {isConnected(keysProject) ? <span className="text-emerald-600 dark:text-emerald-400">connected</span> : 'not connected yet'}
-                </p>
-              </div>
-              {regenConfirmId === keysProject.id ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-amber-600 dark:text-amber-400">Invalidate current keys?</span>
-                  <button onClick={() => setRegenConfirmId(null)} className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">Cancel</button>
-                  <button onClick={() => handleRegen(keysProject.id)} disabled={regenLoading}
-                    className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold flex items-center gap-1">
-                    {regenLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />} Confirm
-                  </button>
-                </div>
-              ) : (
-                <button onClick={() => setRegenConfirmId(keysProject.id)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-amber-950/40 text-slate-600 dark:text-slate-300 hover:text-amber-700 dark:hover:text-amber-400 font-semibold text-xs shadow-sm flex items-center gap-1.5 transition-all">
-                  <RefreshCw className="w-3 h-3" /> Regenerate Keys
-                </button>
-              )}
-            </div>
-
-            {/* Public key */}
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-900 dark:text-white">Public Key (Client SDK)</span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">CLIENT SAFE</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <input readOnly value={keysProject.publicKey} className="flex-1 px-3 py-2 rounded-lg bg-slate-950 text-cyan-400 font-mono text-xs border border-slate-800 focus:outline-none" />
-                <button onClick={() => copy(keysProject.publicKey, 'pub')} className="p-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-colors">
-                  {copiedKey === 'pub' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Secret key */}
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-rose-200/60 dark:border-rose-900/40 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-900 dark:text-white">Secret Key (Server API)</span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400">SECRET — KEEP SAFE</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <input readOnly type={revealSecret ? 'text' : 'password'} value={keysProject.secretKey} className="flex-1 px-3 py-2 rounded-lg bg-slate-950 text-emerald-400 font-mono text-xs border border-slate-800 focus:outline-none" />
-                <button onClick={() => setRevealSecret((v) => !v)} className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors text-xs font-medium">{revealSecret ? 'Hide' : 'Show'}</button>
-                <button onClick={() => copy(keysProject.secretKey, 'sec')} className="p-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-colors">
-                  {copiedKey === 'sec' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Quickstart */}
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">SDK Quickstart</span>
-              <pre className="text-[11px] font-mono text-slate-300 leading-relaxed whitespace-pre-wrap break-all">{`<!-- Paste inside <head> of your website -->
-<script
-  src="${window.location.origin}/tracker.min.js"
-  data-key="${keysProject.publicKey}"
-  async
-></script>`}</pre>
-              <button onClick={() => copy(`<script src="${window.location.origin}/tracker.min.js" data-key="${keysProject.publicKey}" async></script>`, 'snippet')}
-                className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
-                {copiedKey === 'snippet' ? <><Check className="w-3 h-3 text-emerald-400" /> Copied!</> : <><Copy className="w-3 h-3" /> Copy snippet</>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Connection status overview (inside API Keys tab) ── */}
-      {activeTab === 'apikeys' && (
-        <div className="mt-4 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Connected projects</h3>
-              <p className="text-xs text-slate-500 mt-0.5">A project counts as connected once its SDK has sent an event</p>
-            </div>
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400">
-              {projects.filter(isConnected).length} of {projects.length} connected
-            </span>
-          </div>
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {projects.map((p) => (
-              <div key={p.id} className="py-2.5 flex items-center justify-between gap-3 flex-wrap">
-                <button onClick={() => setKeysProjectId(p.id)} className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 hover:text-indigo-600 min-w-0">
-                  <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span className="font-medium truncate">{p.name}</span>
-                  <span className="text-slate-400 truncate">{p.domain}</span>
-                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${statusColors[p.status] || statusColors.active}`}>{p.status}</span>
-                </button>
+              {/* Connection / last active */}
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
+                {isConnected(p) ? (
+                  <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Connected · last active {new Date(p.lastEventAt!).toLocaleString()}
+                  </p>
+                ) : (
+                  <p className="flex items-center gap-1.5 text-xs text-slate-400"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Waiting for first event</p>
+                )}
                 {(p.seenHosts || []).length > 0 && (
-                  <div className="basis-full flex flex-wrap items-center gap-1.5 pl-5 text-[11px]">
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
                     <span className="text-slate-400">Seen from:</span>
                     {p.seenHosts!.map((h) => {
                       const bare = (d: string) => d.replace(/^www\./, '').toLowerCase();
@@ -542,20 +418,154 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
                     })}
                   </div>
                 )}
-                {isConnected(p) ? (
-                  <span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Connected · last event {new Date(p.lastEventAt!).toLocaleString()}
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5 text-xs text-slate-400">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Waiting for first event
-                  </span>
+              </div>
+
+              {/* AI & Insights toggles */}
+              {!archived && (
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {([
+                    { key: 'aiInsightsEnabled', label: 'AI Insights', desc: 'Gemini diagnostics & smart analysis', Icon: Sparkles, on: 'bg-indigo-600', icon: 'text-indigo-500' },
+                    { key: 'healthInsightsEnabled', label: 'Health Insights', desc: 'Core Web Vitals health score', Icon: HeartPulse, on: 'bg-emerald-600', icon: 'text-emerald-500' },
+                  ] as const).map(({ key, label, desc, Icon, on, icon }) => (
+                    <button key={key} onClick={() => toggleFeature(p, key)} disabled={featureLoadingId === p.id}
+                      className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-left transition-colors hover:border-indigo-300 dark:hover:border-indigo-700 disabled:opacity-60">
+                      <span className="flex items-center gap-2 min-w-0">
+                        <Icon className={`w-3.5 h-3.5 shrink-0 ${p[key] ? icon : 'text-slate-400'}`} />
+                        <span className="min-w-0">
+                          <span className="block text-xs font-semibold text-slate-700 dark:text-slate-200">{label}</span>
+                          <span className="block text-[10px] text-slate-400">{desc}</span>
+                        </span>
+                      </span>
+                      {featureLoadingId === p.id ? <Loader2 className="w-4 h-4 animate-spin shrink-0" /> : (
+                        <span className={`relative inline-flex items-center h-5 w-9 rounded-full transition-colors shrink-0 ${p[key] ? on : 'bg-slate-300 dark:bg-slate-700'}`}>
+                          <span className={`inline-block w-3.5 h-3.5 transform rounded-full bg-white transition-transform ${p[key] ? 'translate-x-[18px]' : 'translate-x-1'}`} />
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* API keys for this project */}
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+              <div className="flex items-start justify-between gap-3 flex-wrap border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2"><Key className="w-4 h-4 text-indigo-500" /> API Keys</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Create as many keys as you need for this project and revoke any at any time.</p>
+                </div>
+                {!showNewKey && !archived && (
+                  <button onClick={openNewKey} className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5">
+                    <Plus className="w-3.5 h-3.5" /> Create API key
+                  </button>
                 )}
               </div>
-            ))}
+
+              {showNewKey && (
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Name</label>
+                      <input value={newKeyName} onChange={(e) => setNewKeyName(e.target.value)} autoFocus placeholder="e.g. Production site"
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleCreateKey(p.id); }}
+                        className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Type</label>
+                      <select value={newKeyType} onChange={(e) => setNewKeyType(e.target.value as 'public' | 'secret')}
+                        className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white">
+                        <option value="public">Client (browser SDK)</option>
+                        <option value="secret">Server (secret)</option>
+                      </select>
+                    </div>
+                  </div>
+                  {newKeyError && <p className="text-xs text-red-500">{newKeyError}</p>}
+                  <div className="flex justify-end gap-2">
+                    <button onClick={() => setShowNewKey(false)} className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">Cancel</button>
+                    <button onClick={() => handleCreateKey(p.id)} disabled={newKeyLoading}
+                      className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white text-xs font-semibold flex items-center gap-1.5">
+                      {newKeyLoading && <Loader2 className="w-3 h-3 animate-spin" />} Create key
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {keys.length === 0 ? (
+                <p className="text-xs text-slate-500 py-6 text-center">No API keys yet. Create one to connect your website.</p>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {keys.map((k) => {
+                    const isSecret = k.type === 'secret';
+                    const shown = !isSecret || revealedKeys.has(k.id);
+                    return (
+                      <div key={k.id} className={`py-3 space-y-2 ${justCreatedId === k.id ? 'bg-emerald-50/60 dark:bg-emerald-950/20 -mx-2 px-2 rounded-lg' : ''}`}>
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-bold text-slate-900 dark:text-white truncate">{k.name}</span>
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isSecret ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'}`}>{isSecret ? 'SERVER · SECRET' : 'CLIENT'}</span>
+                              {justCreatedId === k.id && <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">New</span>}
+                            </div>
+                            <p className="text-xs text-slate-500 mt-0.5">Created {new Date(k.createdAt).toLocaleDateString()} · {k.lastUsedAt ? `Last used ${new Date(k.lastUsedAt).toLocaleString()}` : 'Never used'}</p>
+                          </div>
+                          {revokeConfirmId === k.id ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-red-600 dark:text-red-400">Revoke? Sites using it stop reporting.</span>
+                              <button onClick={() => setRevokeConfirmId(null)} className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">Cancel</button>
+                              <button onClick={() => handleRevokeKey(k.id)} disabled={revokeLoading}
+                                className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white text-xs font-semibold flex items-center gap-1">
+                                {revokeLoading && <Loader2 className="w-3 h-3 animate-spin" />} Revoke
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              {!isSecret && (
+                                <button onClick={() => setSetupKeyId(setupKeyId === k.id ? null : k.id)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium flex items-center gap-1">
+                                  <Code2 className="w-3 h-3" /> Setup
+                                </button>
+                              )}
+                              <button onClick={() => setRevokeConfirmId(k.id)} title="Revoke key"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input readOnly type={shown ? 'text' : 'password'} value={k.key}
+                            className={`flex-1 px-3 py-2 rounded-lg bg-slate-950 font-mono text-xs border border-slate-800 focus:outline-none ${isSecret ? 'text-emerald-400' : 'text-cyan-400'}`} />
+                          {isSecret && (
+                            <button onClick={() => toggleReveal(k.id)} className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors text-xs font-medium">{shown ? 'Hide' : 'Show'}</button>
+                          )}
+                          <button onClick={() => copy(k.key, `key-${k.id}`)} className="p-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-colors">
+                            {copiedKey === `key-${k.id}` ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        {setupKeyId === k.id && !isSecret && (
+                          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                            <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">SDK Quickstart</span>
+                            <pre className="text-[11px] font-mono text-slate-300 leading-relaxed whitespace-pre-wrap break-all">{`<!-- Paste inside <head> of your website -->
+<script
+  src="${window.location.origin}/tracker.min.js"
+  data-key="${k.key}"
+  async
+></script>`}</pre>
+                            <button onClick={() => copy(snippetFor(k.key), `snippet-${k.id}`)}
+                              className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                              {copiedKey === `snippet-${k.id}` ? <><Check className="w-3 h-3 text-emerald-400" /> Copied!</> : <><Copy className="w-3 h-3" /> Copy snippet</>}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Workspace Tab ─────────────────────────────────────────────────────── */}
       {activeTab === 'workspace' && (

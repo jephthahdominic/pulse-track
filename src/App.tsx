@@ -221,7 +221,7 @@ export default function App() {
       setCurrentProject(mapProject(pick));
     }
 
-    if (data.apiKeys.length > 0) {
+    {
       const mapKey = (k: any): ApiKey => ({
         id: k.id, projectId: k.projectId, name: k.name, key: k.key,
         type: k.type as 'public' | 'secret',
@@ -437,20 +437,27 @@ export default function App() {
     }
   };
 
-  const handleRegenerateKeys = async (projectId: string): Promise<{ publicKey: string; secretKey: string }> => {
+  const handleCreateApiKey = async (projectId: string, name: string, type: 'public' | 'secret'): Promise<ApiKey> => {
+    let key: ApiKey;
     if (!isAuthRequired) {
-      const pk = `pk_live_demo_${Math.random().toString(36).slice(2, 10)}`;
-      const sk = `sk_live_demo_${Math.random().toString(36).slice(2, 10)}`;
-      setProjects((prev) => prev.map((p) => p.id === projectId ? { ...p, publicKey: pk, secretKey: sk } : p));
-      if (currentProject.id === projectId) setCurrentProject((prev) => ({ ...prev, publicKey: pk, secretKey: sk }));
-      return { publicKey: pk, secretKey: sk };
+      const rand = Math.random().toString(36).slice(2, 14);
+      key = { id: `key_demo_${Date.now()}`, projectId, name, key: `${type === 'secret' ? 'sk' : 'pk'}_live_demo_${rand}`, type, lastUsedAt: null, createdAt: new Date().toISOString() };
+    } else {
+      const res = await fetch('/api/v1/apikeys', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ projectId, name, type }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create API key');
+      key = { id: data.id, projectId: data.projectId, name: data.name, key: data.key, type: data.type, lastUsedAt: data.lastUsedAt || null, createdAt: typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString() };
     }
-    const res = await fetch(`/api/v1/projects/${projectId}/regenerate-keys`, { method: 'POST', headers: authHeaders() });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to regenerate keys');
-    setProjects((prev) => prev.map((p) => p.id === projectId ? { ...p, publicKey: data.publicKey, secretKey: data.secretKey } : p));
-    if (currentProject.id === projectId) setCurrentProject((prev) => ({ ...prev, publicKey: data.publicKey, secretKey: data.secretKey }));
-    return data;
+    setApiKeys((prev) => [key, ...prev]);
+    return key;
+  };
+
+  const handleRevokeApiKey = async (id: string) => {
+    if (isAuthRequired) {
+      const res = await fetch(`/api/v1/apikeys/${id}`, { method: 'DELETE', headers: authHeaders() });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed to revoke API key'); }
+    }
+    setApiKeys((prev) => prev.filter((k) => k.id !== id));
   };
 
   const handleRenameWorkspace = async (name: string) => {
@@ -590,7 +597,8 @@ export default function App() {
               onUpdateProject={handleUpdateProject}
               onArchiveProject={handleArchiveProject}
               onDeleteProject={handleDeleteProject}
-              onRegenerateKeys={handleRegenerateKeys}
+              onCreateApiKey={handleCreateApiKey}
+              onRevokeApiKey={handleRevokeApiKey}
               onRenameWorkspace={handleRenameWorkspace}
               onSelectProject={(proj) => setCurrentProject(proj)}
               themeMode={themeMode}

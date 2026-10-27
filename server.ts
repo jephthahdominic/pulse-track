@@ -863,7 +863,7 @@ async function startServer() {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
-  // ── Project management (update / archive / regenerate keys) ─────────────────
+  // ── Project management (update / archive / delete) ─────────────────
 
   app.patch('/api/v1/projects/:id', async (req: AuthenticatedRequest, res) => {
     if (!isMongoConnected()) { res.status(503).json({ error: 'Database not connected.' }); return; }
@@ -905,26 +905,6 @@ async function startServer() {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
-  app.post('/api/v1/projects/:id/regenerate-keys', async (req: AuthenticatedRequest, res) => {
-    if (!isMongoConnected()) { res.status(503).json({ error: 'Database not connected.' }); return; }
-    const decoded = extractJWT(req); if (!decoded) { res.status(401).json({ error: 'Authentication required.' }); return; }
-    try {
-      const project = await ProjectModel.findOne({ _id: new mongoose.Types.ObjectId(req.params.id), workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId) });
-      if (!project) { res.status(404).json({ error: 'Project not found.' }); return; }
-      const newPublicKey = genPublicKey();
-      const newSecretKey = genSecretKey();
-      await ApiKeyModel.deleteMany({ projectId: project._id });
-      project.publicKey = newPublicKey;
-      project.secretKey = newSecretKey;
-      await project.save();
-      await ApiKeyModel.insertMany([
-        { projectId: project._id, workspaceId: project.workspaceId, name: 'Public Client Key', key: newPublicKey, type: 'public' },
-        { projectId: project._id, workspaceId: project.workspaceId, name: 'Server Secret Key', key: newSecretKey, type: 'secret' },
-      ]);
-      res.json({ publicKey: newPublicKey, secretKey: newSecretKey });
-    } catch (err: any) { res.status(500).json({ error: err.message }); }
-  });
-
   app.patch('/api/v1/workspaces', async (req: AuthenticatedRequest, res) => {
     if (!isMongoConnected()) { res.status(503).json({ error: 'Database not connected.' }); return; }
     const decoded = extractJWT(req); if (!decoded) { res.status(401).json({ error: 'Authentication required.' }); return; }
@@ -937,15 +917,49 @@ async function startServer() {
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
+  const mapApiKey = (k: any) => ({ id: k._id.toString(), projectId: k.projectId.toString(), name: k.name, key: k.key, type: k.type, lastUsedAt: k.lastUsedAt, createdAt: k.createdAt });
+
   app.get('/api/v1/apikeys', async (req: AuthenticatedRequest, res) => {
     if (isMongoConnected()) {
       const decoded = extractJWT(req); if (!decoded) { res.status(401).json({ error: 'Authentication required.' }); return; }
-      const projectId = req.query.projectId as string; if (!projectId) { res.status(400).json({ error: 'projectId is required.' }); return; }
-      const keys = await ApiKeyModel.find({ projectId: new mongoose.Types.ObjectId(projectId) }).lean();
-      res.json({ keys: (keys as any[]).map((k) => ({ id: k._id.toString(), projectId: k.projectId.toString(), name: k.name, key: k.key, type: k.type, lastUsedAt: k.lastUsedAt, createdAt: k.createdAt })) });
+      const projectId = req.query.projectId as string | undefined;
+      if (projectId && !mongoose.Types.ObjectId.isValid(projectId)) { res.status(400).json({ error: 'Invalid project id.' }); return; }
+      const filter: any = { workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId) };
+      if (projectId) filter.projectId = new mongoose.Types.ObjectId(projectId);
+      const keys = await ApiKeyModel.find(filter).sort({ createdAt: -1 }).lean();
+      res.json({ keys: (keys as any[]).map(mapApiKey) });
     } else {
       res.json({ keys: db.apiKeys.filter((k) => k.projectId === ((req.query.projectId as string) || db.projects[0].id)) });
     }
+  });
+
+  // Create a named key for a project (like creating an API key in an AI console)
+  app.post('/api/v1/apikeys', async (req: AuthenticatedRequest, res) => {
+    if (!isMongoConnected()) { res.status(503).json({ error: 'Database not connected.' }); return; }
+    const decoded = extractJWT(req); if (!decoded) { res.status(401).json({ error: 'Authentication required.' }); return; }
+    const { projectId, name, type } = req.body || {};
+    if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) { res.status(400).json({ error: 'A valid projectId is required.' }); return; }
+    if (typeof name !== 'string' || !name.trim()) { res.status(400).json({ error: 'A key name is required.' }); return; }
+    if (type !== 'public' && type !== 'secret') { res.status(400).json({ error: "type must be 'public' or 'secret'." }); return; }
+    try {
+      const project = await ProjectModel.findOne({ _id: new mongoose.Types.ObjectId(projectId), workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId) });
+      if (!project) { res.status(404).json({ error: 'Project not found.' }); return; }
+      const key = type === 'secret' ? genSecretKey() : genPublicKey();
+      const doc = await ApiKeyModel.create({ projectId: project._id, workspaceId: project.workspaceId, name: name.trim().slice(0, 60), key, type });
+      res.status(201).json(mapApiKey(doc));
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Revoke a key: any SDK still using it is rejected from the next request on
+  app.delete('/api/v1/apikeys/:id', async (req: AuthenticatedRequest, res) => {
+    if (!isMongoConnected()) { res.status(503).json({ error: 'Database not connected.' }); return; }
+    const decoded = extractJWT(req); if (!decoded) { res.status(401).json({ error: 'Authentication required.' }); return; }
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) { res.status(400).json({ error: 'Invalid key id.' }); return; }
+    try {
+      const result = await ApiKeyModel.deleteOne({ _id: new mongoose.Types.ObjectId(req.params.id), workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId) });
+      if (!result.deletedCount) { res.status(404).json({ error: 'API key not found.' }); return; }
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
   // ── Support tickets ────────────────────────────────────────────────────────
