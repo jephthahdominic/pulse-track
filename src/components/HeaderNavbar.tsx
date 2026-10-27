@@ -93,7 +93,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
             <span className="hidden sm:inline font-semibold text-sm tracking-tight text-slate-900 dark:text-zinc-100">
               PulseTrack
             </span>
-            <span className="hidden sm:flex items-center space-x-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+            <span className="hidden xl:flex items-center space-x-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <span>LIVE</span>
             </span>
@@ -148,14 +148,14 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
         {/* Quick Search / Command Palette Trigger */}
         <button
           onClick={onOpenCommandPalette}
-          className="hidden sm:flex items-center justify-between h-8 px-2.5 rounded border border-slate-200 dark:border-zinc-800 bg-slate-100/60 hover:bg-slate-200/60 dark:bg-zinc-900/50 dark:hover:bg-zinc-800/60 text-xs text-slate-500 dark:text-zinc-400 w-48 sm:w-56 transition-all cursor-pointer group"
+          className="hidden lg:flex items-center justify-between h-8 px-2.5 rounded border border-slate-200 dark:border-zinc-800 bg-slate-100/60 hover:bg-slate-200/60 dark:bg-zinc-900/50 dark:hover:bg-zinc-800/60 text-xs text-slate-500 dark:text-zinc-400 w-44 xl:w-56 transition-all cursor-pointer group"
           title="Open Command Palette (⌘K or Ctrl+K)"
         >
           <div className="flex items-center space-x-2 truncate">
             <Search className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-500 transition-colors" />
             <span className="truncate">Quick switch tab...</span>
           </div>
-          <kbd className="hidden md:inline-flex items-center px-1.5 py-0.5 rounded border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[10px] font-mono text-slate-500 dark:text-zinc-400 shadow-2xs">
+          <kbd className="hidden xl:inline-flex items-center px-1.5 py-0.5 rounded border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[10px] font-mono text-slate-500 dark:text-zinc-400 shadow-2xs">
             ⌘K
           </kbd>
         </button>
@@ -163,7 +163,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
         {/* Live Demo Trigger */}
         <button
           onClick={onOpenDemo}
-          className="hidden md:flex items-center space-x-1.5 px-2.5 py-1 rounded text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white shadow-sm shadow-blue-500/20 transition-all cursor-pointer"
+          className="hidden xl:flex items-center space-x-1.5 px-2.5 py-1 rounded text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white shadow-sm shadow-blue-500/20 transition-all cursor-pointer"
         >
           <Sparkles className="w-3.5 h-3.5" />
           <span>Live Sandbox</span>
@@ -176,7 +176,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
           title="Export Reports (CSV / JSON)"
         >
           <Download className="w-3.5 h-3.5 text-blue-500" />
-          <span className="hidden sm:inline">Export Data</span>
+          <span className="hidden xl:inline">Export Data</span>
         </button>
 
         {/* Timeframe Selector */}

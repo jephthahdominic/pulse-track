@@ -57,16 +57,16 @@ export const ErrorMonitoring: React.FC<ErrorMonitoringProps> = ({ errors }) => {
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <div className="flex items-center flex-wrap gap-x-2">
                       <span className="text-xs font-bold text-rose-600 dark:text-rose-400 font-mono">
                         {err.type.toUpperCase()}
                       </span>
-                      <span className="text-[10px] font-mono text-slate-400">
+                      <span className="text-[10px] font-mono text-slate-400 break-all">
                         {err.url}
                       </span>
                     </div>
-                    <div className="text-xs font-semibold text-slate-900 dark:text-white font-mono">
+                    <div className="text-xs font-semibold text-slate-900 dark:text-white font-mono break-words">
                       {err.message}
                     </div>
                   </div>

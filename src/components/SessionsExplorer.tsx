@@ -278,7 +278,45 @@ export const SessionsExplorer: React.FC<SessionsExplorerProps> = ({ sessions, au
 
       {/* Sessions Table */}
       <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Phones: one card per session so the key actions are never off-screen */}
+        <div className="lg:hidden space-y-3">
+          {filtered.map((s) => (
+            <div key={s.id} className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold truncate">{s.sessionId}</div>
+                  {s.userId ? (
+                    <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center mt-0.5">
+                      <UserCheck className="w-3 h-3 mr-1" /> {s.userId}
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-slate-400">Anonymous Visitor</div>
+                  )}
+                </div>
+                <span className="shrink-0 px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-bold text-[11px]">{s.pageViewsCount} views</span>
+              </div>
+              <div className="text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                <Globe className="w-3 h-3 text-slate-400 shrink-0" />
+                <span className="truncate">{[s.geo?.city, s.geo?.country].filter(Boolean).join(', ') || 'Unknown location'}</span>
+                <span className="text-slate-400">·</span>
+                <span className="truncate">{s.device?.browser || 'Unknown'} ({s.device?.os || 'Unknown'})</span>
+              </div>
+              <div className="font-mono text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-1.5 min-w-0">
+                <span className="truncate">{s.entryPage}</span>
+                <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
+                <span className="truncate">{s.exitPage}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-xs text-slate-800 dark:text-slate-200 font-medium">{formatDuration(s.durationSeconds)}</span>
+                <button onClick={() => setSelectedSession(s)} className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-sm cursor-pointer">
+                  View Timeline
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider">
@@ -286,8 +324,8 @@ export const SessionsExplorer: React.FC<SessionsExplorerProps> = ({ sessions, au
                 <th className="pb-3">Location & Device</th>
                 <th className="pb-3">Entry Page</th>
                 <th className="pb-3">Exit Page</th>
-                <th className="pb-3 text-right">Duration</th>
-                <th className="pb-3 text-right">Pageviews</th>
+                <th className="pb-3 pl-4 text-right whitespace-nowrap">Duration</th>
+                <th className="pb-3 pl-4 text-right whitespace-nowrap">Pageviews</th>
                 <th className="pb-3 text-right">Action</th>
               </tr>
             </thead>

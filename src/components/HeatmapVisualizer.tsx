@@ -11,7 +11,7 @@ export const HeatmapVisualizer: React.FC<HeatmapVisualizerProps> = ({ clicks = [
   const [selectedRoute, setSelectedRoute] = useState(routes[0] || '');
 
   const activeClicks = selectedRoute ? clicks.filter((c) => c.url === selectedRoute) : clicks;
-  const totalClicks = activeClicks.reduce((a, c) => a + c.count, 0);
+  const totalClicks = activeClicks.reduce((a, c) => a + (c.count || 1), 0);
 
   const normalized = activeClicks
     .map((c) => ({ ...c, x: Math.min(800, Math.max(0, (c.x / 100) * 8)), y: Math.min(600, Math.max(0, (c.y / 100) * 6)) }))
