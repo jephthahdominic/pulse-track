@@ -32,11 +32,18 @@ function genPublicKey() { return `pk_live_${randomBytes(12).toString('hex')}`; }
 function genSecretKey() { return `sk_live_${randomBytes(12).toString('hex')}`; }
 function makeSlug(name: string) { return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + randomBytes(3).toString('hex'); }
 function timeframeToMs(tf: string): number { const m: Record<string, number> = { '1h': 3600000, '24h': 86400000, '7d': 604800000, '30d': 2592000000, '90d': 7776000000 }; return m[tf] || 604800000; }
-function parseDateInput(s: string | undefined): { start: Date; end: Date } | null {
+// The browser's UTC offset in minutes (Date#getTimezoneOffset), sent as X-TZ-Offset, so days start at the user's midnight
+function tzOf(req: express.Request): number | undefined { const n = parseInt(String(req.headers['x-tz-offset'] ?? ''), 10); return Number.isFinite(n) && Math.abs(n) <= 14 * 60 ? n : undefined; }
+function todayRange(tz?: number): { start: Date; end: Date } {
+  const now = Date.now();
+  const startMs = tz === undefined ? new Date().setHours(0, 0, 0, 0) : Math.floor((now - tz * 60000) / 86400000) * 86400000 + tz * 60000;
+  return { start: new Date(startMs), end: new Date(startMs + 86400000) };
+}
+function parseDateInput(s: string | undefined, tz?: number): { start: Date; end: Date } | null {
   if (!s) return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
   if (!m) return null;
-  const start = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0);
+  const start = tz === undefined ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0) : new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) + tz * 60000);
   if (isNaN(start.getTime())) return null;
   return { start, end: new Date(start.getTime() + 86400000) };
 }
@@ -119,9 +126,9 @@ setInterval(() => {
 
 
 // ─── MongoDB analytics aggregation ───────────────────────────────────────────
-async function getRealOverviewStats(projectId: string, timeframe: string, date?: string) {
+async function getRealOverviewStats(projectId: string, timeframe: string, date?: string, tz?: number) {
   const pid = new mongoose.Types.ObjectId(projectId);
-  const range = date ? parseDateInput(date) : null;
+  const range = date ? parseDateInput(date, tz) : timeframe === 'today' ? todayRange(tz) : null;
   const since = range ? range.start : new Date(Date.now() - timeframeToMs(timeframe));
   const until = range ? range.end : new Date();
   const [pageviews, sessions, errors, webVitals] = await Promise.all([
@@ -225,13 +232,13 @@ async function computeFunnels(projectId: string, workspaceId: string) {
 }
 
 // ─── AI Insights payload builder (real Mongo data when connected) ─────────────
-async function buildInsightsPayload(projectId: string, timeframe: string) {
+async function buildInsightsPayload(projectId: string, timeframe: string, tz?: number) {
   if (isMongoConnected() && mongoose.Types.ObjectId.isValid(projectId)) {
     const pid = new mongoose.Types.ObjectId(projectId);
     const proj = await ProjectModel.findById(pid).lean();
     if (proj) {
-      const stats = await getRealOverviewStats(projectId, timeframe);
-      const since = new Date(Date.now() - timeframeToMs(timeframe));
+      const stats = await getRealOverviewStats(projectId, timeframe, undefined, tz);
+      const since = timeframe === 'today' ? todayRange(tz).start : new Date(Date.now() - timeframeToMs(timeframe));
       const [errors, vitals] = await Promise.all([
         EventModel.find({ projectId: pid, type: 'error', timestamp: { $gte: since } }).sort({ timestamp: -1 }).limit(200).lean(),
         EventModel.find({ projectId: pid, type: 'performance', timestamp: { $gte: since } }).sort({ timestamp: -1 }).limit(200).lean(),
@@ -482,14 +489,16 @@ async function startServer() {
       }
       const decoded = extractJWT(req); if (!decoded) { res.status(401).json({ error: 'Authentication required.' }); return; }
       const wsId = new mongoose.Types.ObjectId(decoded.workspaceId);
-      const span = timeframeToMs(timeframe);
       const now = Date.now();
-      const since = new Date(now - span);
-      const prevSince = new Date(now - 2 * span);
+      // 'today' compares the day so far with the same stretch of yesterday; other periods with the equal period before
+      const since = timeframe === 'today' ? todayRange(tzOf(req)).start : new Date(now - timeframeToMs(timeframe));
+      const span = timeframe === 'today' ? now - since.getTime() : timeframeToMs(timeframe);
+      const prevSince = timeframe === 'today' ? new Date(since.getTime() - 86400000) : new Date(now - 2 * span);
+      const prevUntil = new Date(prevSince.getTime() + span);
       const [projects, groups] = await Promise.all([
         ProjectModel.find({ workspaceId: wsId, status: { $ne: 'archived' } }).lean(),
         EventModel.aggregate([
-          { $match: { workspaceId: wsId, type: 'pageview', timestamp: { $gte: prevSince } } },
+          { $match: { workspaceId: wsId, type: 'pageview', $or: [{ timestamp: { $gte: since } }, { timestamp: { $gte: prevSince, $lt: prevUntil } }] } },
           { $group: { _id: { p: '$projectId', cur: { $gte: ['$timestamp', since] } }, views: { $sum: 1 }, sessions: { $addToSet: '$sessionId' } } },
           { $project: { views: 1, sessions: { $size: '$sessions' } } },
         ]),
@@ -523,7 +532,7 @@ async function startServer() {
         const projectId = req.query.projectId as string; if (!projectId) { res.status(400).json({ error: 'projectId is required.' }); return; }
         const project = await ProjectModel.findOne({ _id: new mongoose.Types.ObjectId(projectId), workspaceId: new mongoose.Types.ObjectId(decoded.workspaceId) });
         if (!project) { res.status(403).json({ error: 'Project not found or access denied.' }); return; }
-        res.json(await getRealOverviewStats(projectId, timeframe, date));
+        res.json(await getRealOverviewStats(projectId, timeframe, date, tzOf(req)));
       } else {
         res.json(db.getOverviewStats((req.query.projectId as string) || db.projects[0].id, timeframe as any, date));
       }
@@ -791,6 +800,24 @@ async function startServer() {
     } catch (err: any) { console.error('[Funnels Error]', err); res.status(500).json({ error: 'Failed to fetch funnels.' }); }
   });
 
+  // Group raw clicks by the element that was clicked (tag + id + visible text), per page
+  type RawClick = { url: string; tag?: string; id?: string; text?: string; classes?: string; rage?: boolean; dead?: boolean };
+  function aggregateElements(rows: RawClick[]) {
+    const map = new Map<string, any>();
+    for (const r of rows) {
+      const tag = (r.tag || '').toLowerCase();
+      const text = (r.text || '').replace(/\s+/g, ' ').trim().slice(0, 50);
+      const id = r.id || '';
+      const cls = !id && !text ? (r.classes || '').split(/\s+/)[0] || '' : '';
+      if (!tag && !id && !text) continue; // nothing to identify the element by (older events)
+      const key = `${r.url}\u0000${tag}\u0000${id}\u0000${text}\u0000${cls}`;
+      const e = map.get(key) || { url: r.url, tag, id: id || undefined, text: text || undefined, classes: cls || undefined, count: 0, rageCount: 0, deadCount: 0 };
+      e.count++; if (r.rage) e.rageCount++; if (r.dead) e.deadCount++;
+      map.set(key, e);
+    }
+    return [...map.values()].sort((a, b) => b.count - a.count).slice(0, 200);
+  }
+
   app.get('/api/v1/analytics/heatmaps', async (req, res) => {
     try {
       if (isMongoConnected()) {
@@ -808,10 +835,16 @@ async function startServer() {
           if (c.data?.isRageClick) entry.rageCount++;
           agg.set(key, entry);
         });
-        res.json({ clicks: [...agg.values()] });
+        const elements = aggregateElements((clicks as any[]).map((c) => ({
+          url: c.data?.url || c.data?.path || '/', tag: c.data?.targetTag, id: c.data?.targetId, text: c.data?.targetText,
+          classes: c.data?.targetClasses, rage: !!c.data?.isRageClick, dead: !!c.data?.isDeadClick,
+        })));
+        res.json({ clicks: [...agg.values()], elements });
       } else {
         const projectId = (req.query.projectId as string) || db.projects[0].id;
-        res.json({ clicks: db.clickEvents.filter((c) => c.projectId === projectId) });
+        const demo = db.clickEvents.filter((c) => c.projectId === projectId);
+        const elements = aggregateElements(demo.map((c) => ({ url: c.url, tag: c.targetTag, id: c.targetId, text: c.targetText, classes: c.targetClasses, rage: !!c.isRageClick, dead: !!c.isDeadClick })));
+        res.json({ clicks: demo, elements });
       }
     } catch (err: any) { console.error('[Heatmaps Error]', err); res.status(500).json({ error: 'Failed to fetch heatmap data.' }); }
   });
@@ -1097,7 +1130,7 @@ async function startServer() {
       }
 
       // ── 3. Build trimmed data payload (real Mongo data when connected) ──────
-      const insightsData = await buildInsightsPayload(targetProjectId, selectedTimeframe);
+      const insightsData = await buildInsightsPayload(targetProjectId, selectedTimeframe, tzOf(req));
       const project = insightsData.project;
       const stats = insightsData.stats;
       const topErrors = insightsData.topErrors;

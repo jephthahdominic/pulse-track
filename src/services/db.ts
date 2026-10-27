@@ -560,6 +560,11 @@ class AnalyticsDatabase {
 
   // --- API Methods ---
   public getOverviewStats(projectId: string, timeframe: Timeframe = '7d', date?: string): OverviewStats {
+    // 'today' is the current local calendar day, same as drilling into a single date
+    if (!date && timeframe === 'today') {
+      const n = new Date();
+      date = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+    }
     let pvs = this.pageViews.filter((p) => p.projectId === projectId);
     let sess = this.sessions.filter((s) => s.projectId === projectId);
     let errs = this.errorLogs.filter((e) => e.projectId === projectId);

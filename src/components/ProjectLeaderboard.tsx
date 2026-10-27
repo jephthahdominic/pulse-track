@@ -25,7 +25,7 @@ interface ProjectLeaderboardProps {
 }
 
 const TIMEFRAME_LABEL: Record<string, string> = {
-  '1h': 'the last hour', '24h': 'the last 24 hours', '7d': 'the last 7 days', '30d': 'the last 30 days', '90d': 'the last 90 days',
+  today: 'today so far', '1h': 'the last hour', '24h': 'the last 24 hours', '7d': 'the last 7 days', '30d': 'the last 30 days', '90d': 'the last 90 days',
 };
 
 const MEDAL: Record<number, { ring: string; badge: string; bar: string }> = {
@@ -110,7 +110,7 @@ export const ProjectLeaderboard: React.FC<ProjectLeaderboardProps> = ({
           </div>
           <div className="min-w-0">
             <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">Top 3 Projects</h3>
-            <p className="text-[11px] text-slate-500 dark:text-zinc-500">Most visited over {TIMEFRAME_LABEL[timeframe] || 'this period'}</p>
+            <p className="text-[11px] text-slate-500 dark:text-zinc-500">Most visited · {TIMEFRAME_LABEL[timeframe] || 'this period'}</p>
           </div>
         </div>
         {hasTraffic && (

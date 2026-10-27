@@ -240,7 +240,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     })),
 
     // Timeframes
-    ...(['1h', '24h', '7d', '30d'] as Timeframe[]).map((tf) => ({
+    ...(['today', '1h', '24h', '7d', '30d'] as Timeframe[]).map((tf) => ({
       id: `tf-${tf}`,
       label: `Set Timeframe to ${tf.toUpperCase()}`,
       category: 'Timeframe' as const,

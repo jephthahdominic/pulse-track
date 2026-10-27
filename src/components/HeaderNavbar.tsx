@@ -13,6 +13,7 @@ import {
   LogOut,
   Menu,
 } from 'lucide-react';
+import { PeriodSelect } from './PeriodSelect';
 import { Project, Workspace, User, Timeframe } from '../types';
 import { DatePicker } from './DatePicker';
 
@@ -179,21 +180,13 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
           <span className="hidden xl:inline">Export Data</span>
         </button>
 
-        {/* Timeframe Selector */}
-        <div className={`hidden sm:flex items-center bg-slate-100 dark:bg-zinc-900 rounded p-0.5 border border-slate-200/80 dark:border-zinc-800 text-xs ${selectedDate ? 'opacity-60' : ''}`}>
-          {(['1h', '24h', '7d', '30d'] as Timeframe[]).map((tf) => (
-            <button
-              key={tf}
-              onClick={() => { onSelectDate(null); onSelectTimeframe(tf); }}
-              className={`px-2 py-0.5 rounded text-[11px] font-medium transition-all ${
-                timeframe === tf && !selectedDate
-                  ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-blue-400 font-semibold shadow-xs'
-                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
-              }`}
-            >
-              {tf.toUpperCase()}
-            </button>
-          ))}
+        {/* Period dropdown */}
+        <div className="hidden sm:block">
+          <PeriodSelect
+            timeframe={timeframe}
+            hasCustomDate={!!selectedDate}
+            onChange={(tf) => { onSelectDate(null); onSelectTimeframe(tf); }}
+          />
         </div>
 
         {/* Calendar / Date Picker (desktop+ — mobile uses the Overview filter strip) */}

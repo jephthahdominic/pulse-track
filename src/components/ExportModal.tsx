@@ -248,7 +248,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               </div>
             )}
             <div className="flex bg-slate-100 dark:bg-zinc-900 rounded p-1 border border-slate-200 dark:border-zinc-800 text-xs">
-              {(['1h', '24h', '7d', '30d'] as Timeframe[]).map((tf) => (
+              {(['today', '1h', '24h', '7d', '30d'] as Timeframe[]).map((tf) => (
                 <button
                   key={tf}
                   onClick={() => setSelectedTimeframe(tf)}

@@ -36,6 +36,7 @@ import {
   WebVitalMetric,
   UserProfile,
   HeatmapPoint,
+  HeatmapElement,
 } from './types';
 import { db } from './services/db';
 
@@ -59,7 +60,7 @@ export default function App() {
   );
   const darkMode = themeMode === 'system' ? systemDark : themeMode === 'dark';
   const [activeTab, setActiveTab] = useState<ActiveTab>(() => tabFromPath(window.location.pathname));
-  const [timeframe, setTimeframe] = useState<Timeframe>('7d');
+  const [timeframe, setTimeframe] = useState<Timeframe>('today');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -106,6 +107,7 @@ export default function App() {
   const [webVitals, setWebVitals] = useState<WebVitalMetric[]>(db.webVitals);
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>(db.userProfiles);
   const [heatmapClicks, setHeatmapClicks] = useState<HeatmapPoint[]>([]);
+  const [heatmapElements, setHeatmapElements] = useState<HeatmapElement[]>([]);
   const [funnels, setFunnels] = useState<any[]>([]);
   // Id of the project whose real data has finished its first load (auth mode only)
   const [loadedProjectId, setLoadedProjectId] = useState<string | null>(null);
@@ -249,7 +251,11 @@ export default function App() {
   };
 
   // Helper: get auth headers for API calls
-  const authHeaders = (): Record<string, string> => authToken ? { Authorization: `Bearer ${authToken}` } : {};
+  const authHeaders = (): Record<string, string> => ({
+    // Lets the server start "today" (and single-day views) at the user's own midnight
+    'X-TZ-Offset': String(new Date().getTimezoneOffset()),
+    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+  });
 
   // ── Fetch / Sync data ───────────────────────────────────────────────────────
   const refreshData = async () => {
@@ -290,7 +296,7 @@ export default function App() {
       if (ticketRes.status === 'fulfilled' && ticketRes.value.ok) { const d = await ticketRes.value.json(); setSupportTickets(d.tickets); }
       if (vitalsRes.status === 'fulfilled' && vitalsRes.value.ok) { const d = await vitalsRes.value.json(); setWebVitals(d.vitals || []); }
       if (profileRes.status === 'fulfilled' && profileRes.value.ok) { const d = await profileRes.value.json(); setUserProfiles(d.profiles || []); }
-      if (heatRes.status === 'fulfilled' && heatRes.value.ok) { const d = await heatRes.value.json(); setHeatmapClicks(d.clicks || []); }
+      if (heatRes.status === 'fulfilled' && heatRes.value.ok) { const d = await heatRes.value.json(); setHeatmapClicks(d.clicks || []); setHeatmapElements(d.elements || []); }
       if (funnelRes.status === 'fulfilled' && funnelRes.value.ok) { const d = await funnelRes.value.json(); setFunnels(d.funnels || []); }
       setAdminStats(db.getAdminStats());
     } catch {
@@ -303,6 +309,15 @@ export default function App() {
   useEffect(() => {
     refreshData();
   }, [currentProject.id, timeframe, selectedDate, authToken, authLoading, isAuthRequired]);
+
+  // Monitoring today: keep the numbers moving without a manual refresh
+  const refreshRef = useRef(refreshData);
+  refreshRef.current = refreshData;
+  useEffect(() => {
+    if (timeframe !== 'today' || selectedDate) return;
+    const t = setInterval(() => refreshRef.current(), 30000);
+    return () => clearInterval(t);
+  }, [timeframe, selectedDate]);
 
   const urlSyncedRef = useRef(false);
 
@@ -581,7 +596,7 @@ export default function App() {
           )}
 
           {activeTab === 'heatmaps' && (
-            <HeatmapVisualizer clicks={heatmapClicks} />
+            <HeatmapVisualizer clicks={heatmapClicks} elements={heatmapElements} />
           )}
 
           {activeTab === 'support' && (

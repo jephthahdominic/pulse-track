@@ -1,4 +1,4 @@
-export type Timeframe = '1h' | '24h' | '7d' | '30d' | '90d';
+export type Timeframe = 'today' | '1h' | '24h' | '7d' | '30d' | '90d';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -272,6 +272,18 @@ export interface HeatmapPoint {
   count: number;
   rageCount: number;
   url: string;
+}
+
+/** One clickable element on a page, with how often it was clicked */
+export interface HeatmapElement {
+  url: string;
+  tag: string;
+  id?: string;
+  text?: string;
+  classes?: string;
+  count: number;
+  rageCount: number;
+  deadCount: number;
 }
 
 export interface OverviewStats {

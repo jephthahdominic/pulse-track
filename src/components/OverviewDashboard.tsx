@@ -43,6 +43,7 @@ import {
 import { OverviewStats, Timeframe, Project } from '../types';
 import { AIInsightsWidget } from './AIInsightsWidget';
 import { DatePicker } from './DatePicker';
+import { PeriodSelect } from './PeriodSelect';
 import { ProjectLeaderboard } from './ProjectLeaderboard';
 
 interface OverviewDashboardProps {
@@ -201,21 +202,11 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
     <div className="space-y-4">
       {/* Mobile-only range + date filter strip (keeps the header uncrowded) */}
       <div className="flex sm:hidden items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center bg-slate-100 dark:bg-zinc-900 rounded p-0.5 border border-slate-200/80 dark:border-zinc-800 text-xs">
-          {(['1h', '24h', '7d', '30d'] as Timeframe[]).map((tf) => (
-            <button
-              key={tf}
-              onClick={() => { onSelectDate?.(null); onSelectTimeframe?.(tf); }}
-              className={`px-2 py-0.5 rounded text-[11px] font-medium transition-all ${
-                timeframe === tf && !date
-                  ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-blue-400 font-semibold shadow-xs'
-                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
-              }`}
-            >
-              {tf.toUpperCase()}
-            </button>
-          ))}
-        </div>
+        <PeriodSelect
+          timeframe={timeframe}
+          hasCustomDate={!!date}
+          onChange={(tf) => { onSelectDate?.(null); onSelectTimeframe?.(tf); }}
+        />
         <DatePicker value={date ?? null} onChange={(d) => onSelectDate?.(d)} forceShowLabel />
       </div>
 
