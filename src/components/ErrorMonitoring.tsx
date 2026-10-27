@@ -56,7 +56,7 @@ export const ErrorMonitoring: React.FC<ErrorMonitoringProps> = ({ errors }) => {
                     : 'bg-slate-50/50 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-700/60 hover:border-slate-300 dark:hover:border-slate-600'
                 }`}
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex flex-col min-[360px]:flex-row items-start justify-between gap-2">
                   <div className="space-y-1 min-w-0 flex-1">
                     <div className="flex items-center flex-wrap gap-x-2">
                       <span className="text-xs font-bold text-rose-600 dark:text-rose-400 font-mono">
@@ -71,7 +71,7 @@ export const ErrorMonitoring: React.FC<ErrorMonitoringProps> = ({ errors }) => {
                     </div>
                   </div>
 
-                  <div className="flex flex-col items-end space-y-1 shrink-0">
+                  <div className="flex flex-row min-[360px]:flex-col flex-wrap items-center min-[360px]:items-end gap-1 shrink-0">
                     <span className="text-xs font-extrabold text-slate-900 dark:text-white px-2 py-0.5 rounded bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300">
                       {err.occurrences} events
                     </span>

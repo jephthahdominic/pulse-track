@@ -542,6 +542,9 @@ export default function App() {
               onNavigateTab={(tab: any) => setActiveTab(tab)}
               onOpenExport={() => setIsExportModalOpen(true)}
               authHeaders={authHeaders()}
+              projects={projects}
+              isLive={isAuthRequired}
+              onSelectProject={(proj) => setCurrentProject(proj)}
             />
           )}
 

@@ -282,9 +282,9 @@ export const SessionsExplorer: React.FC<SessionsExplorerProps> = ({ sessions, au
         <div className="lg:hidden space-y-3">
           {filtered.map((s) => (
             <div key={s.id} className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-2">
-              <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start justify-between gap-2 flex-wrap">
                 <div className="min-w-0">
-                  <div className="font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold truncate">{s.sessionId}</div>
+                  <div className="font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold break-all">{s.sessionId}</div>
                   {s.userId ? (
                     <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center mt-0.5">
                       <UserCheck className="w-3 h-3 mr-1" /> {s.userId}
@@ -306,7 +306,7 @@ export const SessionsExplorer: React.FC<SessionsExplorerProps> = ({ sessions, au
                 <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
                 <span className="truncate">{s.exitPage}</span>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <span className="font-mono text-xs text-slate-800 dark:text-slate-200 font-medium">{formatDuration(s.durationSeconds)}</span>
                 <button onClick={() => setSelectedSession(s)} className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-sm cursor-pointer">
                   View Timeline

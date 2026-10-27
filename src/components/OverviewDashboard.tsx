@@ -43,6 +43,7 @@ import {
 import { OverviewStats, Timeframe, Project } from '../types';
 import { AIInsightsWidget } from './AIInsightsWidget';
 import { DatePicker } from './DatePicker';
+import { ProjectLeaderboard } from './ProjectLeaderboard';
 
 interface OverviewDashboardProps {
   stats: OverviewStats;
@@ -54,6 +55,9 @@ interface OverviewDashboardProps {
   onOpenExport?: () => void;
   currentProject?: Project;
   authHeaders?: Record<string, string>;
+  projects?: Project[];
+  isLive?: boolean;
+  onSelectProject?: (project: Project) => void;
 }
 
 interface RealtimeFeedEntry {
@@ -76,6 +80,9 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   onNavigateTab,
   onOpenExport,
   authHeaders,
+  projects = [],
+  isLive = false,
+  onSelectProject,
   currentProject = {
     id: 'proj_default',
     workspaceId: 'ws_prod',
@@ -193,7 +200,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   return (
     <div className="space-y-4">
       {/* Mobile-only range + date filter strip (keeps the header uncrowded) */}
-      <div className="flex sm:hidden items-center justify-between gap-2">
+      <div className="flex sm:hidden items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center bg-slate-100 dark:bg-zinc-900 rounded p-0.5 border border-slate-200/80 dark:border-zinc-800 text-xs">
           {(['1h', '24h', '7d', '30d'] as Timeframe[]).map((tf) => (
             <button
@@ -291,6 +298,18 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Most visited projects */}
+      {projects.length > 0 && onSelectProject && (
+        <ProjectLeaderboard
+          timeframe={timeframe}
+          projects={projects}
+          currentProjectId={currentProject.id}
+          isLive={isLive}
+          authHeaders={authHeaders}
+          onSelectProject={onSelectProject}
+        />
+      )}
 
       {/* AI Insights & Diagnostics Widget */}
       <AIInsightsWidget

@@ -468,6 +468,52 @@ async function startServer() {
 
   // ── Dashboard Analytics API ────────────────────────────────────────────────
 
+  // Most-visited projects in the workspace for a timeframe, with change vs the previous equal period
+  app.get('/api/v1/analytics/leaderboard', async (req: AuthenticatedRequest, res) => {
+    try {
+      const timeframe = (req.query.timeframe as string) || '7d';
+      if (!isMongoConnected()) {
+        const board = db.projects.filter((p) => p.status !== 'archived').map((p) => {
+          const st = db.getOverviewStats(p.id, timeframe as any);
+          return { projectId: p.id, name: p.name, domain: p.domain, status: p.status, pageviews: st.totalVisitors, sessions: st.uniqueVisitors, previousPageviews: null, change: null, lastEventAt: null };
+        }).sort((a, b) => b.pageviews - a.pageviews);
+        res.json({ timeframe, leaderboard: board });
+        return;
+      }
+      const decoded = extractJWT(req); if (!decoded) { res.status(401).json({ error: 'Authentication required.' }); return; }
+      const wsId = new mongoose.Types.ObjectId(decoded.workspaceId);
+      const span = timeframeToMs(timeframe);
+      const now = Date.now();
+      const since = new Date(now - span);
+      const prevSince = new Date(now - 2 * span);
+      const [projects, groups] = await Promise.all([
+        ProjectModel.find({ workspaceId: wsId, status: { $ne: 'archived' } }).lean(),
+        EventModel.aggregate([
+          { $match: { workspaceId: wsId, type: 'pageview', timestamp: { $gte: prevSince } } },
+          { $group: { _id: { p: '$projectId', cur: { $gte: ['$timestamp', since] } }, views: { $sum: 1 }, sessions: { $addToSet: '$sessionId' } } },
+          { $project: { views: 1, sessions: { $size: '$sessions' } } },
+        ]),
+      ]);
+      const stat = new Map<string, { cur: number; curSessions: number; prev: number }>();
+      for (const g of groups as any[]) {
+        const key = g._id.p.toString();
+        const e = stat.get(key) || { cur: 0, curSessions: 0, prev: 0 };
+        if (g._id.cur) { e.cur = g.views; e.curSessions = g.sessions; } else { e.prev = g.views; }
+        stat.set(key, e);
+      }
+      const leaderboard = (projects as any[]).map((p) => {
+        const e = stat.get(p._id.toString()) || { cur: 0, curSessions: 0, prev: 0 };
+        return {
+          projectId: p._id.toString(), name: p.name, domain: p.domain, status: p.status,
+          pageviews: e.cur, sessions: e.curSessions, previousPageviews: e.prev,
+          change: e.prev > 0 ? Math.round(((e.cur - e.prev) / e.prev) * 1000) / 10 : null,
+          lastEventAt: p.lastEventAt || null,
+        };
+      }).sort((a, b) => b.pageviews - a.pageviews);
+      res.json({ timeframe, leaderboard });
+    } catch (err: any) { console.error('[Leaderboard Error]', err); res.status(500).json({ error: 'Failed to build leaderboard.' }); }
+  });
+
   app.get('/api/v1/analytics/overview', async (req: AuthenticatedRequest, res) => {
     try {
       const timeframe = (req.query.timeframe as string) || '7d';

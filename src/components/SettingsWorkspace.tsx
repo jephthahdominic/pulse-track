@@ -194,8 +194,8 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="flex items-center space-x-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center space-x-3 min-w-0">
           <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center">
             <Settings className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
           </div>
@@ -212,7 +212,7 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-fit">
+      <div className="flex gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-fit max-w-full overflow-x-auto">
         {tabs.map((t) => (
           <button key={t.id} onClick={() => setActiveTab(t.id)}
             className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${activeTab === t.id ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>
@@ -276,11 +276,11 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
                     <Globe className="w-4 h-4 text-slate-400" />
                   </div>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-slate-900 dark:text-white truncate">{p.name}</span>
+                    <div className="flex items-center gap-x-2 flex-wrap">
+                      <span className="text-sm font-bold text-slate-900 dark:text-white break-words">{p.name}</span>
                       <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${statusColors[p.status] || statusColors.active}`}>{p.status}</span>
                     </div>
-                    <span className="text-xs text-slate-500 truncate block">{p.domain} · {apiKeys.filter((k) => k.projectId === p.id).length} key(s)</span>
+                    <span className="text-xs text-slate-500 break-all block">{p.domain} · {apiKeys.filter((k) => k.projectId === p.id).length} key(s)</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
