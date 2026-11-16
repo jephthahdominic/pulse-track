@@ -128,10 +128,11 @@ export const LiveVisitors: React.FC<LiveVisitorsProps> = ({ onTriggerSimulatedHi
     fetchFeed();
     fetchClicks();
     const interval = setInterval(() => {
+      if (document.hidden) return; // don't burn bandwidth on background tabs
       fetchLive();
       fetchFeed();
       fetchClicks();
-    }, 5000);
+    }, 10000);
 
     return () => clearInterval(interval);
   }, [fetchLive, fetchFeed, fetchClicks]);

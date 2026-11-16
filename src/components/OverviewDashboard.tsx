@@ -131,7 +131,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
 
   React.useEffect(() => {
     fetchRealtimeFeed();
-    const interval = setInterval(fetchRealtimeFeed, 5000);
+    const interval = setInterval(() => { if (!document.hidden) fetchRealtimeFeed(); }, 15000);
     return () => clearInterval(interval);
   }, [fetchRealtimeFeed]);
 

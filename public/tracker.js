@@ -1,4 +1,4 @@
-/*! PulseTrack Web Tracker v1.0.0 — https://pulsetrack.io */
+/*! PulseTrack Web Tracker v1.1.0 — https://pulsetrack.io */
 (function (w, d) {
   'use strict';
   if (w.__pulsetrack_loaded) { return; }
@@ -80,16 +80,21 @@
     if (queue.length >= 25) { flush(); }
   }
 
-  function flush() {
+  function flush(useBeacon) {
     if (!queue.length) { return; }
     var items = queue.slice();
     queue = [];
     var body = JSON.stringify({ apiKey: apiKey, sessionId: sessionId, events: items });
+    // text/plain + no custom headers = a CORS "simple request": no preflight round-trip
+    if (useBeacon && navigator.sendBeacon) {
+      try { if (navigator.sendBeacon(endpoint, new Blob([body], { type: 'text/plain' }))) { return; } } catch (e) {}
+    }
     var opts = {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-PulseTrack-Key': apiKey },
+      headers: { 'Content-Type': 'text/plain' },
       body: body,
-      keepalive: true
+      keepalive: true,
+      credentials: 'omit'
     };
     try {
       fetch(endpoint, opts).catch(function () {
@@ -100,18 +105,20 @@
     }
   }
 
-  w.setInterval(flush, 5000);
+  w.setInterval(function () { flush(false); }, 10000);
 
   // ── Page view (including client-side route changes) ─────────────────────
+  var deviceSent = false;
   function trackPageView() {
-    enqueue('pageview', {
-      sessionId: sessionId,
+    var pv = {
       url: w.location.href,
       path: w.location.pathname,
-      title: d.title,
-      referrer: d.referrer,
-      device: getDevice()
-    });
+      title: (d.title || '').slice(0, 120),
+      referrer: d.referrer
+    };
+    // Device info only needs to reach the server once per page load (it is stored on the session)
+    if (!deviceSent) { pv.device = getDevice(); deviceSent = true; }
+    enqueue('pageview', pv);
   }
   trackPageView();
 
@@ -153,10 +160,9 @@
     var isDead = !interactive && !t.closest('a,button,input,select,textarea');
 
     enqueue('click', {
-      sessionId: sessionId,
       targetTag: tag,
       targetId: t.id || undefined,
-      targetClasses: (t.className && typeof t.className === 'string') ? t.className.slice(0, 200) : undefined,
+      targetClasses: (t.className && typeof t.className === 'string') ? t.className.slice(0, 80) : undefined,
       targetText: (t.innerText || '').slice(0, 50),
       x: Math.round(e.clientX || 0),
       y: Math.round((e.clientY || 0) + (w.pageYOffset || 0)),
@@ -167,48 +173,50 @@
   });
 
   // ── JS errors & unhandled rejections ─────────────────────────────────────
+  // Each distinct message is reported once per page load, max 10 — stops error loops flooding storage
+  var seenErrors = {}, errorCount = 0;
+  function reportError(type, message, stack) {
+    message = String(message || 'Unhandled Script Error').slice(0, 300);
+    if (seenErrors[message] || errorCount >= 10) { return; }
+    seenErrors[message] = true; errorCount++;
+    enqueue('error', { type: type, message: message, stack: String(stack || '').slice(0, 1500), url: w.location.href });
+  }
   w.addEventListener('error', function (event) {
-    enqueue('error', {
-      sessionId: sessionId,
-      type: 'js_exception',
-      message: event.message || 'Unhandled Script Error',
-      stack: event.error && event.error.stack ? event.error.stack : '',
-      url: w.location.href
-    });
+    reportError('js_exception', event.message, event.error && event.error.stack);
   });
 
   w.addEventListener('unhandledrejection', function (event) {
     var reason = event.reason || {};
-    enqueue('error', {
-      sessionId: sessionId,
-      type: 'unhandled_rejection',
-      message: reason.message || String(reason),
-      stack: reason.stack || '',
-      url: w.location.href
-    });
+    reportError('unhandled_rejection', reason.message || String(reason), reason.stack);
   });
 
   // ── Performance (Core Web Vitals approximations) ─────────────────────────
+  var lcpValue = null;
+  function reportLCP() {
+    if (lcpValue === null) { return; }
+    var l = lcpValue; lcpValue = null;
+    enqueue('performance', { name: 'LCP', value: l, rating: l <= 2500 ? 'good' : l <= 4000 ? 'needs-improvement' : 'poor', url: w.location.href });
+  }
   w.setTimeout(function () {
     try {
       var nav = performance.getEntriesByType('navigation')[0];
       if (nav) {
         var ttfb = nav.responseStart - nav.requestStart;
         if (ttfb > 0) {
-          enqueue('performance', { sessionId: sessionId, name: 'TTFB', value: Math.round(ttfb), rating: ttfb <= 800 ? 'good' : ttfb <= 1800 ? 'needs-improvement' : 'poor', url: w.location.href });
+          enqueue('performance', { name: 'TTFB', value: Math.round(ttfb), rating: ttfb <= 800 ? 'good' : ttfb <= 1800 ? 'needs-improvement' : 'poor', url: w.location.href });
         }
       }
       var fcp = performance.getEntriesByName('first-contentful-paint')[0];
       if (fcp) {
         var v = Math.round(fcp.startTime);
-        enqueue('performance', { sessionId: sessionId, name: 'FCP', value: v, rating: v <= 1800 ? 'good' : v <= 3000 ? 'needs-improvement' : 'poor', url: w.location.href });
+        enqueue('performance', { name: 'FCP', value: v, rating: v <= 1800 ? 'good' : v <= 3000 ? 'needs-improvement' : 'poor', url: w.location.href });
       }
       if (w.PerformanceObserver && performance.getEntriesByType) {
         try {
           var lcpObs = new w.PerformanceObserver(function (list) {
             var entries = list.getEntries();
             var e = entries[entries.length - 1];
-            if (e) { var l = Math.round(e.startTime); enqueue('performance', { sessionId: sessionId, name: 'LCP', value: l, rating: l <= 2500 ? 'good' : l <= 4000 ? 'needs-improvement' : 'poor', url: w.location.href }); }
+            if (e) { lcpValue = Math.round(e.startTime); } // reported once, when the page is hidden
           });
           lcpObs.observe({ type: 'largest-contentful-paint', buffered: true });
         } catch (e) {}
@@ -217,34 +225,34 @@
   }, 2000);
 
   // ── Heartbeat to keep the session "live" on the dashboard ───────────────
+  // Only while the tab is visible — background tabs are not "live" visitors
   w.setInterval(function () {
-    enqueue('heartbeat', { sessionId: sessionId, url: w.location.href, isVisible: d.visibilityState === 'visible' });
-  }, 30000);
+    if (d.visibilityState !== 'visible') { return; }
+    enqueue('heartbeat', { url: w.location.href });
+  }, 60000);
 
   // ── Flush on tab hide / page unload (best-effort via keepalive fetch) ───
-  d.addEventListener('visibilitychange', function () { if (d.visibilityState === 'hidden') { flush(); } });
-  w.addEventListener('pagehide', function () { flush(); });
-  w.addEventListener('beforeunload', function () { flush(); });
+  d.addEventListener('visibilitychange', function () { if (d.visibilityState === 'hidden') { reportLCP(); flush(true); } });
+  w.addEventListener('pagehide', function () { reportLCP(); flush(true); });
 
   // Public API for manual tracking
   w.pulsetrack = {
     track: function (eventName, properties) {
-      enqueue('custom', { sessionId: sessionId, eventName: eventName, properties: properties || {}, url: w.location.href, device: getDevice() });
+      enqueue('custom', { eventName: eventName, properties: properties || {}, url: w.location.href, device: getDevice() });
     },
     identify: function (userId, traits) {
-      enqueue('identify', { sessionId: sessionId, userId: userId, traits: traits || {} });
+      enqueue('identify', { userId: userId, traits: traits || {} });
     },
     trackError: function (errorObj) {
       errorObj = errorObj || {};
       enqueue('error', {
-        sessionId: sessionId,
         type: errorObj.type || 'js_exception',
         message: errorObj.message || 'Script Error',
         stack: errorObj.stack || '',
         url: w.location.href
       });
     },
-    flush: flush,
+    flush: function () { flush(false); },
     sessionId: sessionId
   };
 })(window, document);

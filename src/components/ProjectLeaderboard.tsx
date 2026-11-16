@@ -84,7 +84,7 @@ export const ProjectLeaderboard: React.FC<ProjectLeaderboardProps> = ({
       }
     };
     load();
-    const t = isLive ? setInterval(load, 30000) : undefined;
+    const t = isLive ? setInterval(() => { if (!document.hidden) load(); }, 60000) : undefined;
     return () => { cancelled = true; if (t) clearInterval(t); };
   }, [timeframe, isLive, projects.length]);
 

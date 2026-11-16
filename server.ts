@@ -7,6 +7,7 @@ import { randomBytes } from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
+import compression from 'compression';
 
 // Services
 import { connectMongoDB, isMongoConnected } from './src/services/mongodb.js';
@@ -273,14 +274,38 @@ async function buildInsightsPayload(projectId: string, timeframe: string, tz?: n
 }
 
 // ─── Ingest events to MongoDB ─────────────────────────────────────────────────
+// Client clocks can be wildly wrong (we have seen 1979). Keep timestamps sane so TTL expiry works.
+function sanitizeTimestamp(ts: unknown, now: Date): Date {
+  const n = typeof ts === 'number' ? ts : Number(ts);
+  if (!Number.isFinite(n) || n > now.getTime() + 3600000 || n < now.getTime() - 86400000) return now;
+  return new Date(n);
+}
+
 async function ingestEventsToMongo(projectId: mongoose.Types.ObjectId, workspaceId: mongoose.Types.ObjectId, sessionId: string, events: Array<{ type: string; data: any; timestamp: number }>, clientIp?: string) {
   const now = new Date();
   let session = await SessionModel.findOne({ sessionId });
   if (!session) {
-    session = new SessionModel({ projectId, workspaceId, sessionId, startedAt: now, lastActiveAt: now, durationSeconds: 0, pageViewsCount: 0, eventsCount: 0, entryPage: events.find((e) => e.type === 'pageview')?.data?.path || '/', exitPage: '/', isBounce: true, device: events[0]?.data?.device || {}, geo: events[0]?.data?.geo || {} });
+    session = new SessionModel({ projectId, workspaceId, sessionId, startedAt: now, lastActiveAt: now, durationSeconds: 0, pageViewsCount: 0, eventsCount: 0, entryPage: events.find((e) => e.type === 'pageview')?.data?.path || '/', exitPage: '/', isBounce: true, device: events.find((e) => e.data?.device)?.data?.device || {}, geo: events[0]?.data?.geo || {} });
   }
   const sessionGeo = (session as any).geo?.country ? (session as any).geo : events[0]?.data?.geo || {};
-  await EventModel.insertMany(events.map((evt) => ({ projectId, workspaceId, sessionId, userId: evt.data?.userId, type: evt.type as any, data: evt.data || {}, device: evt.data?.device || (session as any).device || {}, geo: evt.data?.geo || sessionGeo || {}, timestamp: new Date(evt.timestamp || Date.now()) })));
+  // Storage budget (Atlas free tier = 512 MB): heartbeats only keep the session live, so they
+  // update lastActiveAt below instead of becoming documents. Full device/geo lives on the Session;
+  // only error/custom/identify events keep a slim copy because their API responses expose it.
+  const toStore = events.filter((evt) => evt.type !== 'heartbeat');
+  if (toStore.length) {
+    await EventModel.insertMany(toStore.map((evt) => {
+      const { sessionId: _sid, device: evtDevice, geo: evtGeo, ...data } = evt.data || {};
+      const doc: any = { projectId, workspaceId, sessionId, type: evt.type as any, data, timestamp: sanitizeTimestamp(evt.timestamp, now) };
+      if (evt.data?.userId) doc.userId = evt.data.userId;
+      if (evt.type === 'error' || evt.type === 'custom' || evt.type === 'identify') {
+        const dev = evtDevice || (session as any).device || {};
+        const g = evtGeo || sessionGeo || {};
+        doc.device = { browser: dev.browser, os: dev.os, deviceType: dev.deviceType };
+        doc.geo = { country: g.country, countryCode: g.countryCode, city: g.city };
+      }
+      return doc;
+    }));
+  }
   const pvCount = events.filter((e) => e.type === 'pageview').length;
   session.pageViewsCount += pvCount;
   session.eventsCount += events.length;
@@ -325,14 +350,24 @@ async function startServer() {
   // Attempt MongoDB connection (non-blocking — app works in demo mode if unavailable)
   await connectMongoDB();
 
+  app.disable('x-powered-by');
+  // Gzip/deflate every compressible response (dashboard bundle, tracker, JSON) — biggest bandwidth win
+  app.use(compression());
   app.use(express.json({ limit: '2mb' }));
+  // The tracker posts as text/plain so browsers skip the CORS preflight (halves request count)
+  app.use('/api/v1/events', express.text({ type: 'text/plain', limit: '512kb' }), (req, _res, next) => {
+    if (typeof req.body === 'string') { try { req.body = JSON.parse(req.body); } catch { req.body = {}; } }
+    next();
+  });
 
   // CORS — required for SDK cross-origin event ingestion
   app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, X-PulseTrack-Key, Authorization');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, X-PulseTrack-Key, Authorization, X-TZ-Offset');
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE, PATCH');
-    if (req.method === 'OPTIONS') { res.sendStatus(200); return; }
+    // Let browsers cache the preflight (Chrome caps at 2h) instead of re-asking before every batch
+    res.header('Access-Control-Max-Age', '86400');
+    if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
     next();
   });
 
@@ -410,14 +445,14 @@ async function startServer() {
       if (isMongoConnected()) {
         const keyDoc = await ApiKeyModel.findOne({ key: apiKey });
         if (!keyDoc) { res.status(401).json({ error: 'Invalid API key.' }); return; }
-        keyDoc.lastUsedAt = new Date(); await keyDoc.save();
+        if (!keyDoc.lastUsedAt || Date.now() - new Date(keyDoc.lastUsedAt).getTime() > 600000) { keyDoc.lastUsedAt = new Date(); await keyDoc.save(); }
         const hosts = new Set<string>();
         for (const h of [req.headers.origin as string | undefined, ...events.map((e: any) => e?.data?.url)]) {
           try { if (h) hosts.add(new URL(h).hostname); } catch { /* ignore malformed url */ }
         }
         await ProjectModel.updateOne({ _id: keyDoc.projectId }, { $set: { lastEventAt: new Date() }, ...(hosts.size ? { $addToSet: { seenHosts: { $each: [...hosts].slice(0, 5) } } } : {}) });
-        const result = await ingestEventsToMongo(keyDoc.projectId as any, keyDoc.workspaceId as any, sessionId || `sess_${Date.now()}`, events, clientIP(req));
-        res.json(result);
+        await ingestEventsToMongo(keyDoc.projectId as any, keyDoc.workspaceId as any, sessionId || `sess_${Date.now()}`, events, clientIP(req));
+        res.status(204).end(); // the tracker never reads the body
       } else {
         res.json(db.ingestBatchedEvents(apiKey, sessionId || 'sess_default', events));
       }
@@ -823,7 +858,7 @@ async function startServer() {
       if (isMongoConnected()) {
         const decoded = extractJWT(req); if (!decoded) { res.status(401).json({ error: 'Authentication required.' }); return; }
         const projectId = req.query.projectId as string; if (!projectId) { res.status(400).json({ error: 'projectId is required.' }); return; }
-        const clicks = await EventModel.find({ projectId: new mongoose.Types.ObjectId(projectId), type: 'click' }).sort({ timestamp: -1 }).limit(10000).lean();
+        const clicks = await EventModel.find({ projectId: new mongoose.Types.ObjectId(projectId), type: 'click' }).select('data.x data.y data.url data.path data.isRageClick').sort({ timestamp: -1 }).limit(10000).lean();
         const agg = new Map<string, any>();
         (clicks as any[]).forEach((c) => {
           const x = Math.round(((c.data?.x || 0) / 25)) * 25;
@@ -1205,8 +1240,16 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => { res.sendFile(path.join(distPath, 'index.html')); });
+    app.use(express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        const rel = path.relative(distPath, filePath).split(path.sep).join('/');
+        if (rel.startsWith('assets/')) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable'); // content-hashed
+        else if (rel === 'index.html') res.setHeader('Cache-Control', 'no-cache');
+        else if (/^tracker(\.min)?\.js$/.test(rel)) res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+        else res.setHeader('Cache-Control', 'public, max-age=604800');
+      },
+    }));
+    app.get('*', (_req, res) => { res.setHeader('Cache-Control', 'no-cache'); res.sendFile(path.join(distPath, 'index.html')); });
   }
 
   app.listen(PORT, '0.0.0.0', () => {

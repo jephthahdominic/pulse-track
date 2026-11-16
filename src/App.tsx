@@ -315,7 +315,7 @@ export default function App() {
   refreshRef.current = refreshData;
   useEffect(() => {
     if (timeframe !== 'today' || selectedDate) return;
-    const t = setInterval(() => refreshRef.current(), 30000);
+    const t = setInterval(() => { if (!document.hidden) refreshRef.current(); }, 60000);
     return () => clearInterval(t);
   }, [timeframe, selectedDate]);
 
@@ -434,7 +434,7 @@ export default function App() {
       } catch { /* transient; retry next tick */ }
     };
     tick();
-    const t = setInterval(tick, 10000);
+    const t = setInterval(() => { if (!document.hidden) tick(); }, 30000);
     return () => clearInterval(t);
   }, [isAuthRequired, authToken, activeTab]);
 
